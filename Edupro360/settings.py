@@ -23,6 +23,16 @@ load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
+# Clave secreta para registro de admin
+ADMIN_REGISTRATION_SECRET = os.getenv('ADMIN_REGISTRATION_SECRET')
+ADMIN_REGISTRATION_ENABLED = os.getenv('ADMIN_REGISTRATION_ENABLED', 'False').lower() == 'true'
+
+# Validación al inicio
+if not ADMIN_REGISTRATION_SECRET:
+    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env")
+if len(ADMIN_REGISTRATION_SECRET) < 16:
+    raise ValueError("ADMIN_REGISTRATION_SECRET debe tener al menos 16 caracteres")
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key") 
 
@@ -34,22 +44,34 @@ ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
 # Application definition
 
-INSTALLED_APPS = [
+DJANGO_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "rest_framework",
-    "Core",
-    "Users",
-    "Academic",
 ]
 
-AUTH_USER_MODEL = 'Users.UsuarioPersonalizado'
+LOCAL_APPS = [
+    "Base",
+    "Usuarios",
+    "Notificaciones",
+    "Academicos",
+]
+
+THIRD_PARTY_APPS = [
+    'corsheaders',
+    'rest_framework',
+    'rest_framework_simplejwt',
+]
+
+INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
+
+AUTH_USER_MODEL = 'Usuarios.Usuario'
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -117,12 +139,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
-
-TIME_ZONE = "UTC"
-
+LANGUAGE_CODE = "es-co"
+TIME_ZONE = 'America/Bogota'
 USE_I18N = True
-
+USE_L10N = True
 USE_TZ = True
 
 
@@ -136,14 +156,34 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# CORS AUTORIZATIONS
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+]
 
 REST_FRAMEWORK = {
+    # === AUTENTICACIÓN ===
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
+
+    # === PERMISOS GLOBALES ===
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.IsAuthenticated',  # Requiere login por defecto
     ],
+
+    # === THROTTLING (RATE LIMITING) ===
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',     # Para usuarios no autenticados
+        'rest_framework.throttling.UserRateThrottle',     # Para usuarios autenticados
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '10/min',      # 10 peticiones por minuto
+        'user': '100/min',     # 100 peticiones por minuto para usuarios logueados
+    },
 }
 
 SIMPLE_JWT = {
