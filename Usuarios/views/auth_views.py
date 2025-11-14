@@ -25,7 +25,7 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        user = authenticate(request, email=correo, password=password)
+        user = authenticate(request, correo=correo, password=password)
 
         if user is None:
             return Response(
@@ -33,14 +33,12 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Verificar que esté activo
         if not user.is_active:
             return Response(
                 {"detail": "Cuenta desactivada."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Tokens JWT
         refresh = RefreshToken.for_user(user)
         user_data = UsuarioListSerializer(user).data
 
@@ -49,7 +47,6 @@ class LoginView(APIView):
             "access": str(refresh.access_token),
             "refresh": str(refresh),
         })
-
 
 # REFRESH
 
