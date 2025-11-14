@@ -1,0 +1,17 @@
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Dependencias
+node_modules/
+venv/
+__pycache__/
+
+# Archivos de entorno
+.env
+*.env
+
+# Archivos de compilación o temporales
+dist/
+build/
+*.log
