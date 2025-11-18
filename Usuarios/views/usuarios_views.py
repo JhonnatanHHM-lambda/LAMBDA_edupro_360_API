@@ -17,15 +17,6 @@ class UsuarioListCreateView(APIView):
 
     @require_permission(['view_usuario'], app_label='Usuarios')
     def get(self, request):
-        print("\n" + "="*50)
-        print("DEBUG PERMISOS EN VISTA")
-        print(f"Usuario autenticado: {request.user}")
-        print(f"Correo: {request.user.correo if request.user.is_authenticated else 'NO AUTENTICADO'}")
-        print(f"is_active: {request.user.is_active}")
-        print(f"Grupos: {[g.name for g in request.user.groups.all()]}")
-        print(f"Permisos completos: {list(request.user.get_all_permissions())}")
-        print(f"¿Tiene view_usuario?: {request.user.has_perm('usuarios.view_usuario')}")
-        print("="*50 + "\n")
         queryset = Usuario.objects.filter(is_active=True)
         search = request.query_params.get('search')
         if search:
