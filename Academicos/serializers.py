@@ -125,6 +125,12 @@ class CalificacionSerializer(serializers.ModelSerializer):
         return value
 
     def validate_entrega(self, value):
-        if value.estado_entrega != 'E':
-            raise serializers.ValidationError("Solo se puede calificar entregas en estado 'Entregada'.")
+        request = self.context.get('request')
+
+        # Si es POST → validar que la entrega esté en estado 'E'
+        if request and request.method == 'POST':
+            if value.estado_entrega != 'E':
+                raise serializers.ValidationError("Solo se puede calificar entregas en estado 'Entregada'.")
+        
+        # Si es PUT o PATCH → permitir actualizar siempre
         return value

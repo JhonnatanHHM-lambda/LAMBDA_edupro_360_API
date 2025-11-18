@@ -1,3 +1,4 @@
+import shortuuid
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
@@ -5,6 +6,11 @@ from django.utils import timezone
 from Base.models import BaseModel
 from Usuarios.models import Usuario
 
+def generar_codigo_unico():
+    """
+    Genera un código único de 8 caracteres usando shortuuid.
+    """
+    return shortuuid.uuid()[:8].upper()
 
 class PeriodoAcademico(BaseModel):
     nombre = models.CharField(
@@ -25,7 +31,11 @@ class PeriodoAcademico(BaseModel):
 class Asignatura(BaseModel):
     nombre = models.CharField(max_length=100, verbose_name="Nombre de la asignatura")
     codigo = models.CharField(
-        max_length=20, unique=True, verbose_name="Código de la asignatura"
+        max_length=8,
+        unique=True,
+        default=generar_codigo_unico,
+        editable=False,
+        verbose_name="Codigo Usuario"
     )
     descripcion = models.TextField(blank=True, null=True, verbose_name="Descripción")
     docente_responsable = models.ForeignKey(
@@ -139,7 +149,7 @@ class Entrega(BaseModel):
     estado_entrega = models.CharField(
         max_length=1,
         choices=ESTADO_ENTREGA,
-        default="P",
+        default="E",
         verbose_name="Estado de la entrega",
     )
 

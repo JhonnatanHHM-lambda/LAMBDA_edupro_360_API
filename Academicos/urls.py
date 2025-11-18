@@ -1,7 +1,13 @@
 from django.urls import path
-from .views import (
-    PeriodoAcademicoCRUDView, AsignaturaCRUDView, TareaCRUDView,
-    EntregaCRUDView, CalificacionCRUDView, MisNotasView, MisEntregasView
+from Academicos.views.pensum_views import (
+    PeriodoAcademicoCRUDView, AsignaturaCRUDView
+)
+from Academicos.views.tareas_views import ( TareaCRUDView,
+    EntregaCRUDView, MisEntregasView
+)
+from Academicos.views.notas_views import (
+    CalificacionCRUDView, MisNotasView, MisNotasPorAsignaturaView,
+    MisNotasPorPeriodoView, MisNotasResumenView
 )
 
 urlpatterns = [
@@ -28,4 +34,7 @@ urlpatterns = [
 
     # Estudiante
     path('mis-notas/', MisNotasView.as_view(), name='mis-notas'),
+    path('mis-notas/periodo/<int:periodo_id>/', MisNotasPorPeriodoView.as_view(), name='mis-notas-periodo'),
+    path('mis-notas/asignatura/<int:asignatura_id>/', MisNotasPorAsignaturaView.as_view(), name='mis-notas-asignatura'),
+    path('mis-notas/resumen/', MisNotasResumenView.as_view(), name='mis-notas-resumen'),
 ]
