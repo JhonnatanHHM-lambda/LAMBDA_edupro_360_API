@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion
+from .models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion, Inscripcion
 from Usuarios.models import Usuario
 from django.utils import timezone
 from django.db import models
@@ -43,6 +43,21 @@ class AsignaturaSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Este código ya está en uso.")
         return value
 
+class InscripcionSerializer(serializers.ModelSerializer):
+    estudiante_nombre = serializers.CharField(source='estudiante.obtener_nombre_completo', read_only=True)
+    asignatura_nombre = serializers.CharField(source='asignatura.nombre', read_only=True)
+    codigo_asignatura = serializers.CharField(source='asignatura.codigo', read_only=True)
+    periodo = serializers.CharField(source='asignatura.periodo_academico.nombre', read_only=True)
+    docente = serializers.CharField(source='asignatura.docente_responsable.obtener_nombre_completo', read_only=True)
+
+    class Meta:
+        model = Inscripcion
+        fields = [
+            'id', 'estudiante', 'estudiante_nombre',
+            'asignatura', 'asignatura_nombre', 'codigo_asignatura',
+            'periodo', 'docente', 'fecha_inscripcion', 'estado_inscripcion'
+        ]
+        read_only_fields = ['fecha_inscripcion', 'estudiante_nombre', 'asignatura_nombre', 'codigo_asignatura', 'periodo', 'docente']
 
 class TareaSerializer(serializers.ModelSerializer):
     asignatura = serializers.PrimaryKeyRelatedField(

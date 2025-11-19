@@ -69,7 +69,65 @@ class Asignatura(BaseModel):
         ):
             raise ValidationError("El docente debe pertenecer al grupo 'Docente'.")
 
+class Inscripcion(BaseModel):
+    """
+    Permite a un estudiante inscribirse en una asignatura específica.
+    """
+    estudiante = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name="inscripciones_estudiante",
+        limit_choices_to={"groups__name": "Estudiante"},
+        verbose_name="estudiante"
+    )
+    asignatura = models.ForeignKey(
+        "Asignatura", 
+        on_delete=models.CASCADE,
+        related_name="inscripciones_asignatura",
+        verbose_name="asignatura"
+    )
+    fecha_inscripcion = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="fecha de inscripción"
+    )
+    estado_inscripcion = models.CharField(
+        max_length=1,
+        choices=[
+            ("A", "Activa"),
+            ("R", "Retirada"),
+            ("S", "Suspendida"),
+        ],
+        default="A",
+        verbose_name="estado de la inscripción"
+    )
 
+    class Meta:
+        verbose_name = "inscripción"
+        verbose_name_plural = "inscripciones"
+        db_table = "inscripcion"
+        unique_together = ("estudiante", "asignatura")
+        permissions = [
+            ("puede_inscribirse", "Puede inscribirse a asignaturas"),
+            ("puede_ver_inscripciones", "Puede ver todas las inscripciones"),
+        ]
+
+    def __str__(self):
+        estado = dict(self._meta.get_field('estado_inscripcion').choices).get(self.estado_inscripcion, "")
+        return f"{self.estudiante.obtener_nombre_completo().title()} → {self.asignatura.nombre.title()} ({estado})"
+
+    def clean(self):
+        super().clean()
+        if self.asignatura and not self.asignatura.estado:
+            raise ValidationError("No se puede inscribir a una asignatura inactiva.")
+
+        if self.asignatura:
+            hoy = timezone.now().date()
+            periodo = self.asignatura.periodo_academico
+            if periodo.fecha_inicio > hoy or periodo.fecha_fin < hoy:
+                raise ValidationError(
+                    "El periodo académico no está vigente para realizar inscripciones."
+                )
+            
 class Tarea(BaseModel):
     TIPO_TAREA = [
         ("T", "Tarea"),

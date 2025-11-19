@@ -1,6 +1,6 @@
 from django.urls import path
 from Academicos.views.pensum_views import (
-    PeriodoAcademicoCRUDView, AsignaturaCRUDView
+    PeriodoAcademicoCRUDView, AsignaturaCRUDView, InscribirAsignaturaView, MisAsignaturasView, RetirarInscripcionView
 )
 from Academicos.views.tareas_views import ( TareaCRUDView,
     EntregaCRUDView, MisEntregasView
@@ -18,6 +18,11 @@ urlpatterns = [
     # Asignatura
     path('asignaturas/', AsignaturaCRUDView.as_view(), name='asignaturas-list'),
     path('asignaturas/<int:pk>/', AsignaturaCRUDView.as_view(), name='asignaturas-detail'),
+
+    # Incripciones
+    path('inscribir/', InscribirAsignaturaView.as_view(), name='inscribir'),
+    path('mis-asignaturas/', MisAsignaturasView.as_view(), name='mis-asignaturas'),
+    path('retirar/<int:inscripcion_id>/', RetirarInscripcionView.as_view(), name='retirar'),
 
     # Tarea
     path('tareas/', TareaCRUDView.as_view(), name='tareas-list'),

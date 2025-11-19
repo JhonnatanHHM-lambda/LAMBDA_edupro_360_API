@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import Usuario
-
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import Usuario
@@ -80,3 +81,28 @@ class UsuarioAdmin(UserAdmin):
 
     search_fields = ('correo', 'nombres', 'apellidos', 'cedula', 'codigo')
     ordering = ('correo',)
+
+
+# PERMISOS - Administrar todos los permisos del sistema
+
+@admin.register(Permission)
+class PermissionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'codename', 'content_type', 'app_label']
+    list_filter = ['content_type__app_label', 'content_type__model']
+    search_fields = ['name', 'codename', 'content_type__app_label', 'content_type__model']
+    ordering = ['content_type__app_label', 'codename']
+
+    def app_label(self, obj):
+        return obj.content_type.app_label
+    app_label.short_description = 'Aplicación'
+    app_label.admin_order_field = 'content_type__app_label'
+
+
+# CONTENTTYPE - Ver de qué modelos vienen los permisos
+
+@admin.register(ContentType)
+class ContentTypeAdmin(admin.ModelAdmin):
+    list_display = ['app_label', 'model', 'id']
+    list_filter = ['app_label']
+    search_fields = ['app_label', 'model']
+    ordering = ['app_label', 'model']
