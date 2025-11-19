@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Nueva Calificación - EduPro360</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: #1e40af;
+            padding: 30px;
+            text-align: center;
+            color: white;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .content {
+            padding: 30px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .highlight {
+            background: #dbeafe;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 5px solid #1e40af;
+        }
+
+        .grade {
+            font-size: 48px;
+            font-weight: bold;
+            color: #1e40af;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .btn {
+            display: inline-block;
+            background: #1e40af;
+            color: white;
+            padding: 14px 28px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .footer {
+            background: #1f2937;
+            color: #9ca3af;
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EduPro360</h1>
+        </div>
+        <div class="content">
+            <h2>¡Hola, {{ estudiante_nombre }}!</h2>
+            <p>¡Felicidades! Has recibido una nueva calificación:</p>
+
+            <div class="highlight">
+                <strong>Tarea:</strong> {{ tarea_titulo }}<br>
+                <strong>Asignatura:</strong> {{ asignatura }}<br>
+                <strong>Calificado el:</strong> {{ fecha_calificacion }}
+            </div>
+
+            <div class="grade">{{ nota }}</div>
+
+            {% if comentario %}
+            <p><strong>Comentario del docente:</strong><br>
+                {{ comentario }}</p>
+            {% endif %}
+
+            <div style="text-align: center;">
+                <a href="{{ plataforma_url }}/estudiante/calificaciones" class="btn">
+                    Ver Mis Calificaciones
+                </a>
+            </div>
+
+            <p>¡Sigue esforzándote!</p>
+        </div>
+        <div class="footer">
+            <p>EduPro360 &copy; {{ year }} • Plataforma educativa de excelencia</p>
+        </div>
+    </div>
+</body>
+
+</html>

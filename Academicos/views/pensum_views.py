@@ -3,6 +3,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.core.mail import send_mail
+from django.utils.html import strip_tags
+from django.utils import timezone
+from django.template.loader import render_to_string
 from django.conf import settings
 from Edupro360.decoradores import require_permission
 from Academicos.models import PeriodoAcademico, Asignatura, Inscripcion
@@ -52,14 +55,30 @@ class AsignaturaCRUDView(APIView):
         serializer = AsignaturaSerializer(data=request.data)
         if serializer.is_valid():
             asignatura = serializer.save()
+
+            # ENVIAR CORREO PROFESIONAL AL DOCENTE
             if asignatura.docente_responsable:
+                context = {
+                    'docente_nombre': asignatura.docente_responsable.obtener_nombre_completo().title(),
+                    'asignatura_nombre': asignatura.nombre.title(),
+                    'codigo': asignatura.codigo.upper(),
+                    'periodo': asignatura.periodo_academico.nombre,
+                    'plataforma_url': settings.FRONTEND_URL or 'http://localhost:5173',
+                    'year': timezone.now().year,
+                }
+
+                html_message = render_to_string('emails/asignatura_asignada.html', context)
+                plain_message = strip_tags(html_message) 
+
                 send_mail(
-                    "Asignatura asignada",
-                    f"Has sido asignado a: {asignatura.nombre}",
-                    settings.EMAIL_HOST_USER,
-                    [asignatura.docente_responsable.correo]
+                    subject=f"Nueva asignatura asignada: {asignatura.nombre}",
+                    message=plain_message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,  
+                    recipient_list=[asignatura.docente_responsable.correo],
+                    html_message=html_message,
+                    fail_silently=False,
                 )
-                pass
+
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 

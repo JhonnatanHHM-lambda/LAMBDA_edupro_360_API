@@ -6,6 +6,9 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils.html import strip_tags
+from django.utils import timezone
+from django.template.loader import render_to_string
 from Usuarios.models import Usuario
 from Usuarios.serializers import UsuarioListSerializer
 
@@ -84,25 +87,43 @@ class CambiarContrasenaView(APIView):
 
 
 # RECUPERACIÓN
-
 class SolicitarRecuperacionView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         correo = request.data.get('correo')
+        if not correo:
+            return Response({"error": "Correo es requerido"}, status=400)
+
         try:
-            user = Usuario.objects.get(correo=correo, is_active=True)
-            token = user.crear_token_recuperacion()
-            url = f"{settings.FRONTEND_URL}/recuperar/{token}"
+            user = Usuario.objects.get(correo__iexact=correo, is_active=True)
+            token_obj = user.crear_token_recuperacion()  # ← tu método que crea TokenRecuperacionContraseña
+            url_recuperacion = f"{settings.FRONTEND_URL}/recuperar/{token_obj.token}"
+
+            context = {
+                'nombre': user.obtener_nombre_completo().title(),
+                'url_recuperacion': url_recuperacion,
+                'expiracion_horas': 1,
+                'year': timezone.now().year,
+            }
+
+            html_message = render_to_string('emails/recuperacion_contrasena.html', context)
+            plain_message = strip_tags(html_message)
+
             send_mail(
-                "Recuperar contraseña",
-                f"Ingresa aquí: {url}",
-                settings.EMAIL_HOST_USER,
-                [correo]
+                subject="Recupera tu contraseña - EduPro360",
+                message=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,   # ← Correcto y profesional
+                recipient_list=[user.correo],
+                html_message=html_message,
+                fail_silently=False,
             )
-            return Response({"message": "Enlace enviado"})
+
+            return Response({"message": "Si el correo existe, se ha enviado un enlace de recuperación"})
+
         except Usuario.DoesNotExist:
-            return Response({"error": "Correo no encontrado"}, status=404)
+            # ← Seguridad: NO revelamos si el correo existe o no
+            return Response({"message": "Si el correo existe, se ha enviado un enlace de recuperación"})
 
 
 class ConfirmarRecuperacionView(APIView):

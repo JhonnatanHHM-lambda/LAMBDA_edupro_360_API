@@ -4,6 +4,9 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils.html import strip_tags
+from django.utils import timezone
+from django.template.loader import render_to_string
 from django.db import models
 from Edupro360.decoradores import require_permission
 from Academicos.models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion
@@ -34,14 +37,34 @@ class CalificacionCRUDView(APIView):
             entrega = calificacion.entrega
             entrega.estado_entrega = 'C'
             entrega.save()
+
+            # === ENVÍO DE CORREO PROFESIONAL ===
+            context = {
+                'estudiante_nombre': entrega.estudiante.obtener_nombre_completo().title(),
+                'tarea_titulo': entrega.tarea.titulo,
+                'asignatura': entrega.tarea.asignatura.nombre,
+                'nota': calificacion.nota,
+                'comentario': calificacion.comentario or "Sin comentarios",
+                'fecha_calificacion': calificacion.created_at.strftime("%d/%m/%Y a las %I:%M %p"),
+                'plataforma_url': settings.FRONTEND_URL or 'http://localhost:5173',
+                'year': timezone.now().year,
+            }
+
+            html_message = render_to_string('emails/calificacion_publicada.html', context)
+            plain_message = strip_tags(html_message)
+
             send_mail(
-                "Calificación publicada",
-                f"Tu nota en {entrega.tarea.titulo}: {calificacion.nota}",
-                settings.EMAIL_HOST_USER,
-                [entrega.estudiante.correo]
+                subject=f"¡Tienes una nueva calificación! - {entrega.tarea.titulo}",
+                message=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,  
+                recipient_list=[entrega.estudiante.correo],
+                html_message=html_message,
+                fail_silently=False,
             )
+
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
 
     @require_permission(['change_calificacion'], app_label='Academicos')
     def put(self, request, pk):
@@ -49,12 +72,31 @@ class CalificacionCRUDView(APIView):
         serializer = CalificacionSerializer(calificacion, data=request.data, partial=True)
         if serializer.is_valid():
             calificacion = serializer.save()
+
+            # === CORREO DE ACTUALIZACIÓN ===
+            context = {
+                'estudiante_nombre': calificacion.entrega.estudiante.obtener_nombre_completo().title(),
+                'tarea_titulo': calificacion.entrega.tarea.titulo,
+                'asignatura': calificacion.entrega.tarea.asignatura.nombre,
+                'nota_anterior': calificacion._previous_nota if hasattr(calificacion, '_previous_nota') else calificacion.nota,
+                'nota_nueva': calificacion.nota,
+                'comentario': calificacion.comentario or "Sin comentarios adicionales",
+                'plataforma_url': settings.FRONTEND_URL or 'http://localhost:5173',
+                'year': timezone.now().year,
+            }
+
+            html_message = render_to_string('emails/calificacion_actualizada.html', context)
+            plain_message = strip_tags(html_message)
+
             send_mail(
-                "Calificación actualizada",
-                f"Tu nota en {calificacion.entrega.tarea.titulo} fue actualizada: {calificacion.nota}",
-                settings.EMAIL_HOST_USER,
-                [calificacion.entrega.estudiante.correo]
+                subject=f"Calificación actualizada - {calificacion.entrega.tarea.titulo}",
+                message=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[calificacion.entrega.estudiante.correo],
+                html_message=html_message,
+                fail_silently=False,
             )
+
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 

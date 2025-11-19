@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import AllowAny
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from ..models import Usuario
@@ -10,10 +11,26 @@ from ..serializers import (
 )
 from Edupro360.decoradores import require_permission
 
+# Registro
 
-# 1. LISTADO + CREACIÓN
+class RegistroView(APIView):
+    permission_classes = [AllowAny]   
+    def post(self, request):
+        serializer = UsuarioCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            usuario = serializer.save()
+            refresh = RefreshToken.for_user(usuario)
+            return Response({
+                'message': 'Usuario creado exitosamente',
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'usuario': UsuarioListSerializer(usuario).data
+            }, status=201)
+        return Response(serializer.errors, status=400)
 
-class UsuarioListCreateView(APIView):
+# 1. LISTADO
+
+class UsuarioListView(APIView):
 
     @require_permission(['view_usuario'], app_label='Usuarios')
     def get(self, request):
@@ -28,20 +45,6 @@ class UsuarioListCreateView(APIView):
             )
         serializer = UsuarioListSerializer(queryset, many=True)
         return Response(serializer.data)
-
-    # Registro público: SIN decorador
-    def post(self, request):
-        serializer = UsuarioCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            usuario = serializer.save()
-            refresh = RefreshToken.for_user(usuario)
-            return Response({
-                'message': 'Usuario creado',
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-                'usuario': UsuarioListSerializer(usuario).data
-            }, status=201)
-        return Response(serializer.errors, status=400)
 
 
 # 2. DETALLE / ACTUALIZAR / ELIMINAR

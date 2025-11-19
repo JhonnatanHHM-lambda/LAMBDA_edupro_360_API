@@ -4,13 +4,17 @@ from Usuarios.views.auth_views import (
     LoginView, RefreshTokenAPIView, CambiarContrasenaView,
     SolicitarRecuperacionView, ConfirmarRecuperacionView,
 )
-from Usuarios.views.usuarios_views import UsuarioListCreateView, UsuarioDetailView, UsuarioYoView
+from Usuarios.views.usuarios_views import UsuarioListView, UsuarioDetailView, UsuarioYoView, RegistroView
 from Usuarios.views.grupos_views import GrupoListCreateView, GrupoDetailView
 
 
 urlpatterns = [
+
+    # Registro
+    path('registro/', RegistroView.as_view()),
+
     # Usuarios
-    path('usuarios/', UsuarioListCreateView.as_view(), name='usuario-list-create'),
+    path('usuarios/', UsuarioListView.as_view(), name='usuario-list-create'),
     path('usuarios/<int:pk>/', UsuarioDetailView.as_view(), name='usuario-detail'),
     path('usuarios/yo/', UsuarioYoView.as_view(), name='usuario-yo'),
 

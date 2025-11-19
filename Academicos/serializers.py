@@ -53,7 +53,7 @@ class InscripcionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Inscripcion
         fields = [
-            'id', 'estudiante', 'estudiante_nombre',
+            'id', 'estudiante_nombre',
             'asignatura', 'asignatura_nombre', 'codigo_asignatura',
             'periodo', 'docente', 'fecha_inscripcion', 'estado_inscripcion'
         ]
