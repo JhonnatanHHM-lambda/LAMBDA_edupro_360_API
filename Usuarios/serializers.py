@@ -1,6 +1,8 @@
-from rest_framework import serializers
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
+
+from rest_framework import serializers
+
 from .models import Usuario
 
 # 1. LISTADO (solo lectura)

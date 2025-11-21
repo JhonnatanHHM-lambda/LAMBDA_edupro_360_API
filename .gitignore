@@ -14,6 +14,7 @@ __pycache__/
 # Archivos de compilación o temporales
 dist/
 build/
+staticfiles/
 *.log
 
 # Debug

@@ -1,8 +1,22 @@
-from rest_framework import serializers
-from .models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion, Inscripcion
-from Usuarios.models import Usuario
-from django.utils import timezone
 from django.db import models
+from django.utils import timezone
+
+from rest_framework import serializers
+
+from storages.backends.s3boto3 import S3Boto3Storage
+
+from Usuarios.models import Usuario
+
+from .models import (
+    PeriodoAcademico,
+    Asignatura,
+    Tarea,
+    Entrega,
+    Calificacion,
+    Inscripcion,
+)
+
+storage = S3Boto3Storage()
 
 
 class PeriodoAcademicoSerializer(serializers.ModelSerializer):
@@ -74,19 +88,38 @@ class TareaSerializer(serializers.ModelSerializer):
         read_only_fields = ['creado', 'modificado']
 
     def validate(self, data):
-        if data['fecha_vencimiento'] <= data['fecha_publicacion']:
-            raise serializers.ValidationError("La fecha de vencimiento debe ser posterior a la publicación.")
+        hoy = timezone.now()
 
+        # Validar fecha de publicación: debe ser hoy o en el futuro
+        fecha_publicacion = data.get('fecha_publicacion')
+        if fecha_publicacion and fecha_publicacion < hoy:
+            raise serializers.ValidationError(
+                "La fecha de publicación no puede ser anterior a la fecha actual."
+            )
+
+        # Validar fecha de vencimiento: debe ser después de la publicación
+        fecha_vencimiento = data.get('fecha_vencimiento')
+        if fecha_vencimiento and fecha_publicacion and fecha_vencimiento <= fecha_publicacion:
+            raise serializers.ValidationError(
+                "La fecha de vencimiento debe ser posterior a la fecha de publicación."
+            )
+
+        # Validación del peso porcentual
         asignatura = data['asignatura']
-        peso_actual = data['peso_porcentual']
-        total = Tarea.objects.filter(asignatura=asignatura)
-        if self.instance:
-            total = total.exclude(pk=self.instance.pk)
-        total_peso = total.aggregate(models.Sum('peso_porcentual'))['peso_porcentual__sum'] or 0
-        if total_peso + peso_actual > 100:
-            raise serializers.ValidationError(f"La suma de pesos no puede exceder 100%. Actual: {total_peso + peso_actual}%")
-        return data
+        peso_nuevo = data['peso_porcentual']
 
+        queryset = Tarea.objects.filter(asignatura=asignatura, estado=True)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        total_peso = queryset.aggregate(total=models.Sum('peso_porcentual'))['total'] or 0
+
+        if total_peso + peso_nuevo > 100:
+            raise serializers.ValidationError(
+                f"El peso total no puede exceder 100%. Actual: {total_peso + peso_nuevo}%"
+            )
+
+        return data
 
 class EntregaSerializer(serializers.ModelSerializer):
     nota = serializers.SerializerMethodField()
@@ -106,27 +139,35 @@ class EntregaSerializer(serializers.ModelSerializer):
 
     def get_nota(self, obj):
         return obj.calificacion.nota if hasattr(obj, 'calificacion') else None
+    
+    def get_archivo_entrega(self, obj):
+            if obj.archivo_entrega and obj.archivo_entrega.name:
+                # URL FIRMADA VÁLIDA POR 1 HORA
+                return storage.url(obj.archivo_entrega.name)
+            return None
 
     def validate(self, data):
-        tarea_id = self.initial_data.get('tarea')
-        if not tarea_id:
-            raise serializers.ValidationError("La tarea es requerida.")
+        request = self.context['request']
+        
+        if request.method == 'POST':
+            tarea_id = self.initial_data.get('tarea')
+            if not tarea_id:
+                raise serializers.ValidationError({"tarea": "La tarea es requerida."})
 
-        try:
-            tarea = Tarea.objects.get(pk=tarea_id)
-        except Tarea.DoesNotExist:
-            raise serializers.ValidationError("La tarea no existe.")
+            try:
+                tarea = Tarea.objects.get(pk=tarea_id)
+            except Tarea.DoesNotExist:
+                raise serializers.ValidationError({"tarea": "La tarea no existe."})
 
-        estudiante = self.context['request'].user
+            estudiante = request.user
 
-        if tarea.fecha_vencimiento < timezone.now():
-            raise serializers.ValidationError("No se puede entregar después de la fecha de vencimiento.")
+            if tarea.fecha_vencimiento < timezone.now():
+                raise serializers.ValidationError("No se puede entregar después de la fecha de vencimiento.")
 
-        if Entrega.objects.filter(tarea=tarea, estudiante=estudiante).exists():
-            raise serializers.ValidationError("Ya has entregado esta tarea.")
+            if Entrega.objects.filter(tarea=tarea, estudiante=estudiante).exists():
+                raise serializers.ValidationError("Ya has entregado esta tarea.")
 
         return data
-
 
 class CalificacionSerializer(serializers.ModelSerializer):
     class Meta:

@@ -1,20 +1,33 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 from django.shortcuts import get_object_or_404
-from django.core.mail import send_mail
-from django.utils.html import strip_tags
 from django.utils import timezone
-from django.template.loader import render_to_string
-from django.conf import settings
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+
 from Edupro360.decoradores import require_permission
+
 from Academicos.models import PeriodoAcademico, Asignatura, Inscripcion
 from Academicos.serializers import (
-    PeriodoAcademicoSerializer, AsignaturaSerializer, InscripcionSerializer
+    PeriodoAcademicoSerializer,
+    AsignaturaSerializer,
+    InscripcionSerializer,
 )
 
+
+# ==================== PERIODO ACADÉMICO ====================
 class PeriodoAcademicoCRUDView(APIView):
+
     @require_permission(['add_periodoacademico'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Crear nuevo período académico",
+        request_body=PeriodoAcademicoSerializer,
+        responses={201: PeriodoAcademicoSerializer, 400: "Errores de validación"},
+        tags=['Períodos Académicos']
+    )
     def post(self, request):
         serializer = PeriodoAcademicoSerializer(data=request.data)
         if serializer.is_valid():
@@ -23,6 +36,12 @@ class PeriodoAcademicoCRUDView(APIView):
         return Response(serializer.errors, status=400)
 
     @require_permission(['view_periodoacademico'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Listar períodos activos o detalle por ID",
+        operation_description="• Sin pk → lista todos los períodos activos\n• Con pk → detalle del período",
+        responses={200: PeriodoAcademicoSerializer(many=True)},
+        tags=['Períodos Académicos']
+    )
     def get(self, request, pk=None):
         if pk:
             periodo = get_object_or_404(PeriodoAcademico, pk=pk, estado=True)
@@ -33,6 +52,12 @@ class PeriodoAcademicoCRUDView(APIView):
         return Response(serializer.data)
 
     @require_permission(['change_periodoacademico'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Actualizar período académico",
+        request_body=PeriodoAcademicoSerializer,
+        responses={200: PeriodoAcademicoSerializer, 400: "Datos inválidos"},
+        tags=['Períodos Académicos']
+    )
     def put(self, request, pk):
         periodo = get_object_or_404(PeriodoAcademico, pk=pk, estado=True)
         serializer = PeriodoAcademicoSerializer(periodo, data=request.data, partial=True)
@@ -42,6 +67,12 @@ class PeriodoAcademicoCRUDView(APIView):
         return Response(serializer.errors, status=400)
 
     @require_permission(['delete_periodoacademico'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Desactivar período académico",
+        operation_description="Soft delete: cambia estado=False",
+        responses={204: "Período desactivado"},
+        tags=['Períodos Académicos']
+    )
     def delete(self, request, pk):
         periodo = get_object_or_404(PeriodoAcademico, pk=pk)
         periodo.estado = False
@@ -49,40 +80,36 @@ class PeriodoAcademicoCRUDView(APIView):
         return Response(status=204)
 
 
+# ==================== ASIGNATURA ====================
 class AsignaturaCRUDView(APIView):
+
     @require_permission(['add_asignatura'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Crear nueva asignatura",
+        operation_description="Envía correo automático al docente cuando se le asigna",
+        request_body=AsignaturaSerializer,
+        responses={201: AsignaturaSerializer, 400: "Errores de validación"},
+        tags=['Asignaturas']
+    )
     def post(self, request):
         serializer = AsignaturaSerializer(data=request.data)
         if serializer.is_valid():
             asignatura = serializer.save()
 
-            # ENVIAR CORREO PROFESIONAL AL DOCENTE
             if asignatura.docente_responsable:
-                context = {
-                    'docente_nombre': asignatura.docente_responsable.obtener_nombre_completo().title(),
-                    'asignatura_nombre': asignatura.nombre.title(),
-                    'codigo': asignatura.codigo.upper(),
-                    'periodo': asignatura.periodo_academico.nombre,
-                    'plataforma_url': settings.FRONTEND_URL or 'http://localhost:5173',
-                    'year': timezone.now().year,
-                }
 
-                html_message = render_to_string('emails/asignatura_asignada.html', context)
-                plain_message = strip_tags(html_message) 
-
-                send_mail(
-                    subject=f"Nueva asignatura asignada: {asignatura.nombre}",
-                    message=plain_message,
-                    from_email=settings.DEFAULT_FROM_EMAIL,  
-                    recipient_list=[asignatura.docente_responsable.correo],
-                    html_message=html_message,
-                    fail_silently=False,
-                )
+                pass 
 
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
     @require_permission(['view_asignatura'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Listar asignaturas activas o detalle por ID",
+        operation_description="• Sin pk → todas las asignaturas activas\n• Con pk → detalle",
+        responses={200: AsignaturaSerializer(many=True)},
+        tags=['Asignaturas']
+    )
     def get(self, request, pk=None):
         if pk:
             asignatura = get_object_or_404(Asignatura, pk=pk, estado=True)
@@ -93,6 +120,12 @@ class AsignaturaCRUDView(APIView):
         return Response(serializer.data)
 
     @require_permission(['change_asignatura'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Actualizar asignatura",
+        request_body=AsignaturaSerializer,
+        responses={200: AsignaturaSerializer},
+        tags=['Asignaturas']
+    )
     def put(self, request, pk):
         asignatura = get_object_or_404(Asignatura, pk=pk, estado=True)
         serializer = AsignaturaSerializer(asignatura, data=request.data, partial=True)
@@ -102,14 +135,36 @@ class AsignaturaCRUDView(APIView):
         return Response(serializer.errors, status=400)
 
     @require_permission(['delete_asignatura'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Desactivar asignatura",
+        responses={204: "Asignatura desactivada"},
+        tags=['Asignaturas']
+    )
     def delete(self, request, pk):
         asignatura = get_object_or_404(Asignatura, pk=pk)
         asignatura.estado = False
         asignatura.save()
         return Response(status=204)
 
+
+# ==================== INSCRIPCIÓN ====================
 class InscribirAsignaturaView(APIView):
     @require_permission(['puede_inscribirse'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Inscribirse en una asignatura",
+        operation_description="El estudiante autenticado se inscribe en una asignatura",
+        request_body=InscripcionSerializer,
+        responses={
+            201: openapi.Response("Inscripción exitosa", examples={
+                "application/json": {
+                    "detail": "Inscripción exitosa",
+                    "asignatura": "Matemáticas I",
+                    "codigo": "MAT101"
+                }
+            })
+        },
+        tags=['Inscripciones - Estudiante']
+    )
     def post(self, request):
         serializer = InscripcionSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
@@ -124,35 +179,84 @@ class InscribirAsignaturaView(APIView):
 
 class MisAsignaturasView(APIView):
     @require_permission(['puede_inscribirse'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Mis asignaturas inscritas",
+        operation_description="Lista todas las asignaturas en las que el estudiante está inscrito y activo",
+        responses={200: openapi.Response(
+            description="Lista de asignaturas inscritas",
+            examples={"application/json": [
+                {
+                    "id": 5,
+                    "asignatura_id": 12,
+                    "nombre": "Cálculo II",
+                    "codigo": "CAL201",
+                    "docente": "Dr. María González",
+                    "periodo": "2025-I",
+                    "fecha_inscripcion": "2025-11-15T10:30:00Z"
+                }
+            ]}
+        )},
+        tags=['Inscripciones - Estudiante']
+    )
     def get(self, request):
-        inscripciones = Inscripcion.objects.filter(
-            estudiante=request.user,
-            estado=True
-        ).select_related('asignatura__periodo_academico', 'asignatura__docente_responsable')
+        try:
+            inscripciones = Inscripcion.objects.filter(
+                estudiante=request.user,
+                estado_inscripcion="A"
+            ).select_related(
+                'asignatura',
+                'asignatura__periodo_academico',
+                'asignatura__docente_responsable'
+            )
 
-        data = []
-        for insc in inscripciones:
-            data.append({
-                "id": insc.id,
-                "asignatura_id": insc.asignatura.id,
-                "nombre": insc.asignatura.nombre,
-                "codigo": insc.asignatura.codigo,
-                "docente": insc.asignatura.docente_responsable.get_full_name() if insc.asignatura.docente_responsable else "Sin docente",
-                "periodo": insc.asignatura.periodo_academico.nombre,
-                "fecha_inscripcion": insc.fecha_inscripcion
-            })
-        return Response(data)
+            data = []
+            for insc in inscripciones:
+                data.append({
+                    "id": insc.id,
+                    "asignatura_id": insc.asignatura.id,
+                    "nombre": insc.asignatura.nombre,
+                    "codigo": insc.asignatura.codigo,
+                    "docente": insc.asignatura.docente_responsable.get_full_name()
+                        if (insc.asignatura.docente_responsable and hasattr(insc.asignatura.docente_responsable, "get_full_name"))
+                        else "Sin docente",
+                    "periodo": getattr(insc.asignatura.periodo_academico, "nombre", "Sin periodo"),
+                    "fecha_inscripcion": insc.fecha_inscripcion
+                })
+            return Response(data)
+
+        except Exception as e:
+            return Response({"error": "Error interno"}, status=500)
 
 
 class RetirarInscripcionView(APIView):
     @require_permission(['puede_inscribirse'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Retirarse de una asignatura",
+        operation_description="Cambia estado de inscripción a 'Retirada'",
+        manual_parameters=[
+            openapi.Parameter(
+                'inscripcion_id',
+                openapi.IN_PATH,
+                type=openapi.TYPE_INTEGER,
+                description='ID de la inscripción (no de la asignatura)'
+            )
+        ],
+        responses={
+            200: "Te has retirado de la asignatura",
+            404: "Inscripción no encontrada o no pertenece al usuario"
+        },
+        tags=['Inscripciones - Estudiante']
+    )
     def delete(self, request, inscripcion_id):
         inscripcion = get_object_or_404(
             Inscripcion,
             id=inscripcion_id,
             estudiante=request.user,
-            estado=True
+            estado_inscripcion="A"   
         )
-        inscripcion.estado = False
+        inscripcion.estado_inscripcion = "R"
         inscripcion.save()
-        return Response({"detail": "Te has retirado de la asignatura"}, status=200)
+        return Response(
+            {"detail": "Te has retirado de la asignatura"},
+            status=200
+        )

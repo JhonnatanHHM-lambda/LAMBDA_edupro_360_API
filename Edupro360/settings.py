@@ -10,10 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
-from pathlib import Path
-from dotenv import load_dotenv
-from datetime import timedelta
+from __future__ import absolute_import, unicode_literals
+
 import os
+from datetime import timedelta
+from pathlib import Path
+
+from celery.schedules import crontab
+from dotenv import load_dotenv
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -42,19 +46,32 @@ DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
+# === CONFIGURACIÓN DE CORREO ELECTRÓNICO ===
+EMAIL_USER = os.getenv('EMAIL_USER')
+EMAIL_PASS = os.getenv('EMAIL_PASS')
+
 if DEBUG:
-    # Desarrollo → ver emails en consola
+    # vemos el correo en consola 
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
-    # Producción → correo real
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = 'smtp.gmail.com'
-    EMAIL_PORT = 587
-    EMAIL_USE_TLS = True
-    EMAIL_HOST_USER = os.environ.get('EMAIL_USER')
-    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASS')
-    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+    # Producción o pruebas reales
+    if EMAIL_USER and EMAIL_PASS:
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+        EMAIL_HOST = 'smtp.gmail.com'
+        EMAIL_PORT = 587
+        EMAIL_USE_TLS = True
+        EMAIL_HOST_USER = EMAIL_USER
+        EMAIL_HOST_PASSWORD = EMAIL_PASS
+        DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+        SERVER_EMAIL = EMAIL_HOST_USER
+        print("Correo configurado para envío REAL con Gmail")
+    else:
+        # Seguridad: si no hay credenciales → no envía y no muestra nada en consola
+        EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+        print("ATENCIÓN: No hay credenciales de correo → envío desactivado")
 
+# URL del frontend (para correos, redirecciones, etc.)
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
 
 # Application definition
 
@@ -78,6 +95,7 @@ LOCAL_APPS = [
 
 THIRD_PARTY_APPS = [
     'corsheaders',
+    'drf_yasg',
     'rest_framework',
     'rest_framework_simplejwt',
 ]
@@ -89,6 +107,7 @@ AUTH_USER_MODEL = 'Usuarios.Usuario'
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -166,7 +185,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
-MEDIA_URL = '/media/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -194,7 +215,7 @@ REST_FRAMEWORK = {
 
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',  
+        'rest_framework.renderers.BrowsableAPIRenderer',
     ),
 
     # === THROTTLING (RATE LIMITING) ===
@@ -223,8 +244,53 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = os.getenv('CELERY_TIMEZONE', 'America/Bogota')
 
-# Beat usará esta hora
 
 # Importante para que las tareas programadas usen tu zona horaria
 CELERY_ENABLE_UTC = False
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# SWAGGER
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Token de acceso. Ejemplo: Bearer eyJhbGciOiJIUzI1NiIsIn...'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'JSON_EDITOR': True,
+    'SUPPORTED_SUBMIT_METHODS': ['get', 'post', 'put', 'patch', 'delete'],
+    'OPERATIONS_SORTER': 'alpha',
+    'TAGS_SORTER': 'alpha',
+    'DOC_EXPANSION': 'list',
+    'SHOW_COMMON_EXTENSIONS': True,
+}
+
+# Para que aparezcan TODOS los endpoints (incluso los de AllowAny)
+DEFAULT_AUTO_SCHEMA_CLASS = 'drf_yasg.inspectors.SwaggerAutoSchema'
+
+
+# settings.py → CONFIGURACIÓN CON R2 PRIVADO
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+AWS_S3_ENDPOINT_URL = os.getenv('AWS_S3_ENDPOINT_URL')
+
+# CLAVE PARA R2 PRIVADO
+AWS_S3_REGION_NAME = 'auto'
+AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_S3_ADDRESSING_STYLE = 'path'        
+AWS_S3_USE_SSL = True
+
+# SEGURIDAD
+AWS_QUERYSTRING_AUTH = True
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_EXPIRE = 3600
+AWS_S3_FILE_OVERWRITE = True
+
+# Utilizar codigo o herramientas de debug cuando programen y quitarlo cuando suban a pr

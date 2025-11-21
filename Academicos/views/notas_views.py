@@ -1,35 +1,55 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.shortcuts import get_object_or_404
-from django.core.mail import send_mail
-from django.conf import settings
-from django.utils.html import strip_tags
-from django.utils import timezone
-from django.template.loader import render_to_string
 from django.db import models
-from Edupro360.decoradores import require_permission
+from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from Academicos.models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion
-from Academicos.serializers import ( CalificacionSerializer )
+from Academicos.serializers import CalificacionSerializer
+from Notificaciones.tasks import (
+    enviar_correo_calificacion_modificada,
+    enviar_correo_calificacion_nueva
+)
+from Edupro360.decoradores import require_permission
 
-# === CALIFICACIÓN (CRUD COMPLETO) ===
 
+# ==================== CALIFICACIÓN (CRUD COMPLETO) ====================
 class CalificacionCRUDView(APIView):
 
     @require_permission(['view_calificacion'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Listar todas las calificaciones o una específica",
+        operation_description="""
+        • Sin pk → lista todas las calificaciones  
+        • Con pk en la URL → devuelve solo esa calificación
+        """,
+        responses={
+            200: CalificacionSerializer(many=True)
+        },
+        tags=['Calificaciones - Docente']
+    )
     def get(self, request, pk=None):
-        # Si viene pk → obtener una sola calificación
         if pk is not None:
             calificacion = get_object_or_404(Calificacion, pk=pk)
             serializer = CalificacionSerializer(calificacion)
             return Response(serializer.data)
 
-        # Si NO viene pk → listar todas las calificaciones
         calificaciones = Calificacion.objects.all()
         serializer = CalificacionSerializer(calificaciones, many=True)
         return Response(serializer.data)
 
     @require_permission(['can_grade_task'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Crear nueva calificación",
+        operation_description="Califica una entrega y envía correo automático al estudiante (asíncrono con Celery)",
+        request_body=CalificacionSerializer,
+        responses={
+            201: CalificacionSerializer,
+            400: "Datos inválidos"
+        },
+        tags=['Calificaciones - Docente']
+    )
     def post(self, request):
         serializer = CalificacionSerializer(data=request.data)
         if serializer.is_valid():
@@ -37,70 +57,41 @@ class CalificacionCRUDView(APIView):
             entrega = calificacion.entrega
             entrega.estado_entrega = 'C'
             entrega.save()
-
-            # === ENVÍO DE CORREO PROFESIONAL ===
-            context = {
-                'estudiante_nombre': entrega.estudiante.obtener_nombre_completo().title(),
-                'tarea_titulo': entrega.tarea.titulo,
-                'asignatura': entrega.tarea.asignatura.nombre,
-                'nota': calificacion.nota,
-                'comentario': calificacion.comentario or "Sin comentarios",
-                'fecha_calificacion': calificacion.created_at.strftime("%d/%m/%Y a las %I:%M %p"),
-                'plataforma_url': settings.FRONTEND_URL or 'http://localhost:5173',
-                'year': timezone.now().year,
-            }
-
-            html_message = render_to_string('emails/calificacion_publicada.html', context)
-            plain_message = strip_tags(html_message)
-
-            send_mail(
-                subject=f"¡Tienes una nueva calificación! - {entrega.tarea.titulo}",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,  
-                recipient_list=[entrega.estudiante.correo],
-                html_message=html_message,
-                fail_silently=False,
-            )
-
+            enviar_correo_calificacion_nueva.delay(calificacion.id)
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 
-
     @require_permission(['change_calificacion'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Actualizar calificación existente",
+        operation_description="Modifica nota o retroalimentación. Envía correo de actualización al estudiante",
+        request_body=CalificacionSerializer,
+        responses={
+            200: CalificacionSerializer,
+            400: "Datos inválidos",
+            404: "No encontrada"
+        },
+        tags=['Calificaciones - Docente']
+    )
     def put(self, request, pk):
         calificacion = get_object_or_404(Calificacion, pk=pk)
         serializer = CalificacionSerializer(calificacion, data=request.data, partial=True)
         if serializer.is_valid():
             calificacion = serializer.save()
-
-            # === CORREO DE ACTUALIZACIÓN ===
-            context = {
-                'estudiante_nombre': calificacion.entrega.estudiante.obtener_nombre_completo().title(),
-                'tarea_titulo': calificacion.entrega.tarea.titulo,
-                'asignatura': calificacion.entrega.tarea.asignatura.nombre,
-                'nota_anterior': calificacion._previous_nota if hasattr(calificacion, '_previous_nota') else calificacion.nota,
-                'nota_nueva': calificacion.nota,
-                'comentario': calificacion.comentario or "Sin comentarios adicionales",
-                'plataforma_url': settings.FRONTEND_URL or 'http://localhost:5173',
-                'year': timezone.now().year,
-            }
-
-            html_message = render_to_string('emails/calificacion_actualizada.html', context)
-            plain_message = strip_tags(html_message)
-
-            send_mail(
-                subject=f"Calificación actualizada - {calificacion.entrega.tarea.titulo}",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[calificacion.entrega.estudiante.correo],
-                html_message=html_message,
-                fail_silently=False,
-            )
-
+            enviar_correo_calificacion_modificada.delay(calificacion.id)
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
 
     @require_permission(['delete_calificacion'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Eliminar calificación",
+        operation_description="Elimina la calificación y cambia estado de entrega a 'Entregada'",
+        responses={
+            204: "Calificación eliminada",
+            404: "No encontrada"
+        },
+        tags=['Calificaciones - Docente']
+    )
     def delete(self, request, pk):
         calificacion = get_object_or_404(Calificacion, pk=pk)
         entrega = calificacion.entrega
@@ -110,83 +101,54 @@ class CalificacionCRUDView(APIView):
         return Response(status=204)
 
 
-# === MIS NOTAS ===
-
+# ==================== MIS NOTAS (ESTUDIANTE) ====================
 class MisNotasView(APIView):
     @require_permission(['can_view_own_grades'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Mis notas completas",
+        operation_description="Devuelve todas las tareas, notas, promedios y peso calificado por asignatura del estudiante autenticado",
+        responses={200: openapi.Response(
+            description="Lista detallada de notas por asignatura",
+            examples={"application/json": [
+                {
+                    "id_asignatura": 1,
+                    "asignatura": "Matemáticas",
+                    "codigo": "MAT101",
+                    "periodo": "2025-I",
+                    "docente": "Dr. Pérez",
+                    "promedio_ponderado": 85.5,
+                    "peso_calificado_%": 70.0,
+                    "tareas": [
+                        {
+                            "id_tarea": 5,
+                            "titulo": "Tarea 1 - Álgebra",
+                            "tipo_tarea": "Examen",
+                            "peso_porcentual": 30.0,
+                            "nota": 90.0,
+                            "retroalimentacion": "Excelente trabajo",
+                            "estado": "Calificada",
+                            "fecha_entrega": "2025-11-10T15:30:00Z"
+                        }
+                        
+                    ]
+                }
+            ]}
+        )},
+        tags=['Notas - Estudiante']
+    )
     def get(self, request):
         return self._get_notas(request.user)
 
-    def _get_notas(self, estudiante, periodo_id=None, asignatura_id=None):
-        asignaturas = Asignatura.objects.filter(estado=True)
-
-        if periodo_id:
-            asignaturas = asignaturas.filter(periodo_academico_id=periodo_id)
-        if asignatura_id:
-            asignaturas = asignaturas.filter(id=asignatura_id)
-
-        data = []
-        for asignatura in asignaturas:
-            tareas = Tarea.objects.filter(asignatura=asignatura, estado=True)
-            notas_tareas = []
-
-            for tarea in tareas:
-                entrega = Entrega.objects.filter(tarea=tarea, estudiante=estudiante).first()
-                calificacion = entrega.calificacion if entrega and hasattr(entrega, 'calificacion') else None
-
-                estado = "Calificada" if calificacion else ("Entregada" if entrega else "Pendiente")
-
-                notas_tareas.append({
-                    "id_tarea": tarea.id,
-                    "titulo": tarea.titulo,
-                    "tipo_tarea": tarea.get_tipo_tarea_display(),
-                    "peso_porcentual": float(tarea.peso_porcentual),
-                    "nota": float(calificacion.nota) if calificacion else None,
-                    "retroalimentacion": calificacion.retroalimentacion_docente if calificacion else None,
-                    "estado": estado,
-                    "fecha_entrega": entrega.fecha_entrega.isoformat() if entrega else None,
-                })
-
-            promedio = self._calcular_promedio(estudiante, asignatura)
-            peso_calificado = self._peso_calificado(estudiante, asignatura)
-
-            data.append({
-                "id_asignatura": asignatura.id,
-                "asignatura": asignatura.nombre,
-                "codigo": asignatura.codigo,
-                "periodo": asignatura.periodo_academico.nombre,
-                "docente": asignatura.docente_responsable.__str__() if asignatura.docente_responsable else "Sin docente",
-                "tareas": notas_tareas,
-                "promedio_ponderado": round(promedio, 2),
-                "peso_calificado_%": peso_calificado
-            })
-
-        data.sort(key=lambda x: (x['periodo'], x['asignatura']))
-        return Response(data)
-
-    def _calcular_promedio(self, estudiante, asignatura):
-        entregas = Entrega.objects.filter(
-            tarea__asignatura=asignatura,
-            estudiante=estudiante,
-            estado_entrega='C'
-        ).select_related('calificacion', 'tarea')
-
-        total = sum(
-            (e.calificacion.nota * e.tarea.peso_porcentual / 100)
-            for e in entregas if e.calificacion
-        )
-        return total
-
-    def _peso_calificado(self, estudiante, asignatura):
-        peso = Entrega.objects.filter(
-            tarea__asignatura=asignatura,
-            estudiante=estudiante,
-            estado_entrega='C'
-        ).aggregate(total=models.Sum('tarea__peso_porcentual'))['total'] or 0
-        return float(peso)
 
 class MisNotasPorPeriodoView(APIView):
     @require_permission(['can_view_own_grades'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Mis notas por período académico",
+        manual_parameters=[
+            openapi.Parameter('periodo_id', openapi.IN_PATH, type=openapi.TYPE_INTEGER, description='ID del período')
+        ],
+        tags=['Notas - Estudiante']
+    )
     def get(self, request, periodo_id):
         get_object_or_404(PeriodoAcademico, id=periodo_id, estado=True)
         view = MisNotasView()
@@ -195,6 +157,13 @@ class MisNotasPorPeriodoView(APIView):
 
 class MisNotasPorAsignaturaView(APIView):
     @require_permission(['can_view_own_grades'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Mis notas de una asignatura específica",
+        manual_parameters=[
+            openapi.Parameter('asignatura_id', openapi.IN_PATH, type=openapi.TYPE_INTEGER, description='ID de la asignatura')
+        ],
+        tags=['Notas - Estudiante']
+    )
     def get(self, request, asignatura_id):
         get_object_or_404(Asignatura, id=asignatura_id, estado=True)
         view = MisNotasView()
@@ -203,6 +172,17 @@ class MisNotasPorAsignaturaView(APIView):
 
 class MisNotasResumenView(APIView):
     @require_permission(['can_view_own_grades'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Resumen rápido de mis promedios",
+        operation_description="Solo asignaturas con al menos una nota o peso calificado",
+        responses={200: openapi.Response(
+            description="Resumen compacto",
+            examples={"application/json": [
+                {"asignatura": "Matemáticas", "promedio": 88.5, "peso_calificado_%": 70}
+            ]}
+        )},
+        tags=['Notas - Estudiante']
+    )
     def get(self, request):
         estudiante = request.user
         data = []

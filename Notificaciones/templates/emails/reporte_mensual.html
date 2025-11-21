@@ -8,17 +8,47 @@
         .container { max-width: 700px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
         .header { background: #1e40af; padding: 40px 30px; text-align: center; color: white; }
         .header h1 { margin: 0; font-size: 32px; font-weight: 300; }
-        .header p { margin: 10px 0 0; font-size: 18px; opacity: 0.9; }
         .content { padding: 40px 30px; color: #333; }
         h2 { color: #1e40af; border-bottom: 3px solid #dbeafe; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin: 25px 0; font-size: 15px; }
-        th { background: #1e40af; color: white; padding: 14px 10px; text-align: left; }
-        td { padding: 12px 10px; border-bottom: 1px solid #eee; }
-        tr:nth-child(even) { background-color: #f8fafc; }
-        .total-row { background: #dbeafe !important; font-weight: bold; font-size: 16px; }
-        .footer { background: #1f2937; color: #9ca3af; padding: 30px; text-align: center; font-size: 14px; }
-        .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: bold; }
-        .badge-green { background: #d1fae5; color: #065f46; }
+
+        /* TABLE FIX FOR OUTLOOK */
+        table {
+            width: 100%;
+            border-spacing: 0;
+            border: 1px solid #d1d5db;
+            font-size: 14px;
+        }
+
+        th {
+            background: #1e40af;
+            color: white;
+            padding: 12px 8px;
+            border: 1px solid #d1d5db;
+            text-align: left;
+        }
+
+        td {
+            padding: 10px 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .row-alt {
+            background: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .badge-green {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
     </style>
 </head>
 <body>
@@ -47,16 +77,14 @@
                 </thead>
                 <tbody>
                     {% for item in datos_reporte %}
-                    <tr {% if forloop.last %}class="total-row"{% endif %}>
+                    <tr class="{% cycle '' 'row-alt' %}">
                         <td><strong>{{ item.asignatura }}</strong></td>
                         <td>{{ item.codigo }}</td>
                         <td>{{ item.periodo }}</td>
                         <td>{{ item.estudiantes }}</td>
                         <td>{{ item.calificadas }}</td>
                         <td>{{ item.promedio }}</td>
-                        <td>
-                            <span class="badge badge-green">{{ item.tasa_aprobacion }}</span>
-                        </td>
+                        <td><span class="badge badge-green">{{ item.tasa_aprobacion }}</span></td>
                     </tr>
                     {% empty %}
                     <tr>
@@ -73,7 +101,7 @@
             </p>
         </div>
 
-        <div class="footer">
+        <div class="footer" style="background:#1f2937; color:#9ca3af; padding:30px; text-align:center;">
             <p>EduPro360 &copy; {{ year }} • Plataforma educativa de excelencia<br>
             Medellín, Colombia</p>
         </div>

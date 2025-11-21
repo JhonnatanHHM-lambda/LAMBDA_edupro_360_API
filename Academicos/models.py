@@ -1,8 +1,11 @@
 import shortuuid
-from django.db import models
+
 from django.core.exceptions import ValidationError
+from django.core.files.storage import default_storage
+from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
+
 from Base.models import BaseModel
 from Usuarios.models import Usuario
 
@@ -220,6 +223,24 @@ class Entrega(BaseModel):
     def __str__(self):
         return f"Entrega de {self.estudiante.obtener_nombre_completo()} - {self.tarea.titulo.title()}"
 
+    def save(self, *args, **kwargs):
+            # Solo si ya existe en DB y tiene archivo
+            if self.pk:
+                try:
+                    old = Entrega.objects.get(pk=self.pk)
+                    if old.archivo_entrega and old.archivo_entrega != self.archivo_entrega:
+                        # Borra físicamente del bucket
+                        default_storage.delete(old.archivo_entrega.name)
+                except Entrega.DoesNotExist:
+                    pass
+
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+            # Al borrar la entrega, borra también el archivo de R2
+            if self.archivo_entrega:
+                default_storage.delete(self.archivo_entrega.name)
+            super().delete(*args, **kwargs)
 
     def clean(self):
         if self.tarea.fecha_vencimiento < timezone.now():

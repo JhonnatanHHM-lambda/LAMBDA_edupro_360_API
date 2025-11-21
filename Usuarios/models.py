@@ -1,9 +1,11 @@
 import shortuuid
+from datetime import timedelta
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
 from django.utils.crypto import get_random_string
-from datetime import timedelta
+
 from Base.models import BaseModel
 
 def generar_codigo_unico():

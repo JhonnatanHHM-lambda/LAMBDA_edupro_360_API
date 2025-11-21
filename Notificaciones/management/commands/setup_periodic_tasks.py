@@ -17,7 +17,7 @@ class Command(BaseCommand):
         PeriodicTask.objects.get_or_create(
             crontab=schedule,
             name='Reporte Mensual Automático - 8:00 AM Día 1',
-            task='Academicos.tasks.generar_reporte_mensual',
+            task='Notificaciones.tasks.generar_reporte_mensual',
             defaults={'enabled': True}
         )
 
@@ -33,7 +33,7 @@ class Command(BaseCommand):
         PeriodicTask.objects.get_or_create(
             crontab=daily_schedule,
             name='Revisar y programar recordatorios de tareas',
-            task='Academicos.tasks.programar_recordatorios_tareas',
+            task='Notificaciones.tasks.programar_recordatorios_tareas',
             defaults={'enabled': True}
         )
 
