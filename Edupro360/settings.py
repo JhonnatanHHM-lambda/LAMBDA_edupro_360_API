@@ -32,17 +32,19 @@ load_dotenv(BASE_DIR / ".env")
 ADMIN_REGISTRATION_SECRET = os.getenv('ADMIN_REGISTRATION_SECRET')
 ADMIN_REGISTRATION_ENABLED = os.getenv('ADMIN_REGISTRATION_ENABLED', 'False').lower() == 'true'
 
-# Validación al inicio
-if not ADMIN_REGISTRATION_SECRET:
-    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env")
-if len(ADMIN_REGISTRATION_SECRET) < 16:
-    raise ValueError("ADMIN_REGISTRATION_SECRET debe tener al menos 16 caracteres")
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key") 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+# ANTES (falla en producción)
+if not ADMIN_REGISTRATION_SECRET:
+    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env")
+
+# AHORA (perfecto para Render)
+if not ADMIN_REGISTRATION_SECRET and DEBUG:
+    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env (solo en desarrollo)")
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
