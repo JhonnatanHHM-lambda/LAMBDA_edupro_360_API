@@ -38,10 +38,6 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
-# ANTES (falla en producción)
-if not ADMIN_REGISTRATION_SECRET:
-    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env")
-
 # AHORA (perfecto para Render)
 if not ADMIN_REGISTRATION_SECRET and DEBUG:
     raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env (solo en desarrollo)")
