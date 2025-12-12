@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db.models import OuterRef, Exists
 
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -84,7 +85,104 @@ class TareaCRUDView(APIView):
         serializer = TareaSerializer(tareas, many=True)
         return Response(serializer.data)
 
+# -------------------------------------------------------------
+# 1. TAREAS PENDIENTES (con filtro opcional por asignatura)
+# -------------------------------------------------------------
+class TareasPendientesEstudianteView(APIView):
+    @require_permission(['puede_inscribirse'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Tareas pendientes del estudiante",
+        operation_description="""
+        Devuelve todas las tareas de las asignaturas inscritas donde el estudiante 
+        aún no ha entregado.
+        
+        Filtro opcional: ?asignatura_id=7 → solo tareas de esa asignatura
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'asignatura_id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                description='Filtrar por ID de asignatura (opcional)',
+                required=False
+            )
+        ],
+        responses={200: TareaSerializer(many=True)},
+        tags=['Tareas - Estudiante']
+    )
+    def get(self, request):
+        asignatura_id = request.query_params.get('asignatura_id')
 
+        # Subquery: existe entrega del estudiante para esta tarea?
+        entrega_exists = Entrega.objects.filter(
+            tarea=OuterRef('pk'),
+            estudiante=request.user
+        )
+
+        tareas_pendientes = Tarea.objects.filter(
+            asignatura__inscripciones_asignatura__estudiante=request.user,
+            asignatura__inscripciones_asignatura__estado_inscripcion='A',
+            asignatura__estado=True,
+            estado=True,
+        ).annotate(
+            ha_entregado=Exists(entrega_exists)
+        ).filter(ha_entregado=False).select_related(
+            'asignatura', 'asignatura__docente_responsable', 'asignatura__periodo_academico'
+        ).order_by('fecha_vencimiento')
+
+        # APLICAR FILTRO SI VIENE
+        if asignatura_id:
+            tareas_pendientes = tareas_pendientes.filter(asignatura_id=asignatura_id)
+
+        serializer = TareaSerializer(tareas_pendientes, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# -------------------------------------------------------------
+# 2. TAREAS ENTREGADAS (sin calificar) (con filtro opcional por asignatura)
+# -------------------------------------------------------------
+class TareasEntregadasEstudianteView(APIView):
+    @require_permission(['puede_inscribirse'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Tareas entregadas por el estudiante (sin calificar)",
+        operation_description="""
+        Tareas que el estudiante ya entregó pero que aún no tienen calificación.
+        
+        Filtro opcional: ?asignatura_id=7 → solo tareas entregadas de esa asignatura
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'asignatura_id',
+                openapi.IN_QUERY,
+                type=openapi.TYPE_INTEGER,
+                description='Filtrar por ID de asignatura (opcional)',
+                required=False
+            )
+        ],
+        responses={200: TareaSerializer(many=True)},
+        tags=['Tareas - Estudiante']
+    )
+    def get(self, request):
+        asignatura_id = request.query_params.get('asignatura_id')
+
+        tareas_entregadas = Tarea.objects.filter(
+            asignatura__inscripciones_asignatura__estudiante=request.user,
+            asignatura__inscripciones_asignatura__estado_inscripcion='A',
+            asignatura__estado=True,
+            estado=True,
+            entregas__estudiante=request.user,
+            entregas__estado_entrega__in=['E', 'P']
+        ).distinct().select_related(
+            'asignatura', 'asignatura__docente_responsable', 'asignatura__periodo_academico'
+        ).order_by('-entregas__fecha_entrega')
+
+        # APLICAR FILTRO SI VIENE
+        if asignatura_id:
+            tareas_entregadas = tareas_entregadas.filter(asignatura_id=asignatura_id)
+
+        serializer = TareaSerializer(tareas_entregadas, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
 # ==================== ENTREGAS (ESTUDIANTE Y DOCENTE) ====================
 class EntregaCRUDView(APIView):
     parser_classes = [MultiPartParser, FormParser]
@@ -242,6 +340,40 @@ class EntregaCRUDView(APIView):
             })
         return Response(data)
 
+# ==================== BUSCAR MI ENTREGA POR TAREA ====================
+
+class MiEntregaPorTareaView(APIView):
+    """
+    Busca la entrega del estudiante autenticado para una tarea específica.
+    Devuelve 404 si no existe.
+    """
+    @require_permission(['can_submit_task'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Mi entrega de una tarea específica",
+        operation_description="Devuelve la entrega del estudiante autenticado para la tarea indicada. Incluye archivo firmado, nota y retroalimentación si ya fue calificada.",
+        responses={
+            200: EntregaSerializer,
+            404: "No has entregado esta tarea o no existe"
+        },
+        tags=['Entregas - Estudiante']
+    )
+    def get(self, request, tarea_id):
+        try:
+            entrega = Entrega.objects.get(
+                tarea_id=tarea_id,
+                estudiante=request.user,
+                tarea__estado=True,
+                tarea__asignatura__estado=True,
+                estado=True
+            )
+        except Entrega.DoesNotExist:
+            return Response(
+                {"detail": "No has entregado esta tarea o no está disponible."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = EntregaSerializer(entrega)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 class MisEntregasView(APIView):
     @require_permission(['can_submit_task'], app_label='Usuarios')
     @swagger_auto_schema(
@@ -252,5 +384,79 @@ class MisEntregasView(APIView):
     )
     def get(self, request):
         entregas = Entrega.objects.filter(estudiante=request.user, estado=True)
+        serializer = EntregaSerializer(entregas, many=True)
+        return Response(serializer.data)
+    
+# ==================== ENTREGAS DEL DOCENTE POR ESTADO ====================
+
+class EntregasEntregadasDocenteView(APIView):
+    """
+    Devuelve solo las entregas a las tareas del docente con estado 'E' (Entregada, sin calificar)
+    Soporta filtro opcional por asignatura: ?asignatura_id=ID
+    """
+    @require_permission(['can_grade_task'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Entregas enviadas a mis tareas (sin calificar)",
+        operation_description="Lista todas las entregas a las tareas del docente autenticado con estado 'E'. Filtrar por asignatura con ?asignatura_id=ID",
+        manual_parameters=[
+            openapi.Parameter('asignatura_id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='ID de la asignatura (opcional)')
+        ],
+        responses={200: EntregaSerializer(many=True)},
+        tags=['Entregas - Docente']
+    )
+    def get(self, request):
+        asignatura_id = request.query_params.get('asignatura_id')
+        
+        entregas = Entrega.objects.filter(
+            tarea__asignatura__docente_responsable=request.user,
+            tarea__asignatura__estado=True,
+            tarea__estado=True,
+            estado_entrega='E',
+            estado=True
+        ).select_related(
+            'estudiante', 'tarea', 'tarea__asignatura'
+        ).order_by('-fecha_entrega')
+
+        if asignatura_id:
+            entregas = entregas.filter(tarea__asignatura_id=asignatura_id)
+
+        serializer = EntregaSerializer(entregas, many=True)
+        return Response(serializer.data)
+
+
+class EntregasCalificadasDocenteView(APIView):
+    """
+    Devuelve solo las entregas a las tareas del docente con estado 'C' (Calificada)
+    Soporta filtro opcional por asignatura: ?asignatura_id=ID
+    """
+    @require_permission(['can_grade_task'], app_label='Usuarios')
+    @swagger_auto_schema(
+        operation_summary="Entregas calificadas en mis tareas",
+        operation_description="Lista todas las entregas a las tareas del docente autenticado con estado 'C' y nota visible. Filtrar por asignatura con ?asignatura_id=ID",
+        manual_parameters=[
+            openapi.Parameter('asignatura_id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, description='ID de la asignatura (opcional)')
+        ],
+        responses={200: EntregaSerializer(many=True)},
+        tags=['Entregas - Docente']
+    )
+    def get(self, request):
+        asignatura_id = request.query_params.get('asignatura_id')
+        
+        entregas = Entrega.objects.filter(
+            tarea__asignatura__docente_responsable=request.user,
+            tarea__asignatura__estado=True,
+            tarea__estado=True,
+            estado_entrega='C',  
+            estado=True
+        ).select_related(
+            'estudiante',
+            'tarea',
+            'tarea__asignatura',
+            'calificacion' 
+        ).order_by('-fecha_entrega')
+
+        if asignatura_id:
+            entregas = entregas.filter(tarea__asignatura_id=asignatura_id)
+
         serializer = EntregaSerializer(entregas, many=True)
         return Response(serializer.data)

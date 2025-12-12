@@ -32,6 +32,7 @@ class PeriodoAcademicoSerializer(serializers.ModelSerializer):
 
 
 class AsignaturaSerializer(serializers.ModelSerializer):
+
     docente_responsable = serializers.PrimaryKeyRelatedField(
         queryset=Usuario.objects.filter(groups__name='Docente'),
         allow_null=True, required=False
@@ -39,12 +40,24 @@ class AsignaturaSerializer(serializers.ModelSerializer):
     periodo_academico = serializers.PrimaryKeyRelatedField(
         queryset=PeriodoAcademico.objects.filter(estado=True)
     )
+    
+    # NUEVOS CAMPOS: Nombres para display
+    docente_nombre = serializers.CharField(
+        source='docente_responsable.obtener_nombre_completo',
+        read_only=True,
+        allow_null=True
+    )
+    periodo_nombre = serializers.CharField(
+        source='periodo_academico.nombre',
+        read_only=True
+    )
 
     class Meta:
         model = Asignatura
         fields = [
             'id', 'nombre', 'codigo', 'descripcion', 'estado',
             'docente_responsable', 'periodo_academico',
+            'docente_nombre', 'periodo_nombre',  # ← Agrega aquí
             'creado', 'modificado'
         ]
         read_only_fields = ['creado', 'modificado']
@@ -123,17 +136,40 @@ class TareaSerializer(serializers.ModelSerializer):
 
 class EntregaSerializer(serializers.ModelSerializer):
     nota = serializers.SerializerMethodField()
-
+    
+    # AÑADIMOS ESTOS CAMPOS
+    estudiante_nombre = serializers.CharField(
+        source='estudiante.obtener_nombre_completo',
+        read_only=True
+    )
+    estudiante_codigo = serializers.CharField(
+        source='estudiante.codigo',
+        read_only=True
+    )
+    
+    # Información de la tarea
+    tarea_titulo = serializers.CharField(source='tarea.titulo', read_only=True)
+    asignatura_nombre = serializers.CharField(source='tarea.asignatura.nombre', read_only=True)
+    asignatura_codigo = serializers.CharField(source='tarea.asignatura.codigo', read_only=True)
+    calificacion_id = serializers.IntegerField(source='calificacion.id', read_only=True, allow_null=True)
+    retroalimentacion = serializers.CharField(source='calificacion.retroalimentacion_docente', read_only=True, allow_null=True)
     class Meta:
         model = Entrega
         fields = [
             'id',
             'tarea',
+            'tarea_titulo',
+            'estudiante_nombre',
+            'estudiante_codigo',
+            'asignatura_nombre',
+            'asignatura_codigo',
             'archivo_entrega',
             'comentarios_estudiante',
             'fecha_entrega',
             'estado_entrega',
             'nota',
+            'calificacion_id',         
+            'retroalimentacion',
         ]
         read_only_fields = ['fecha_entrega', 'estado_entrega', 'nota']
 

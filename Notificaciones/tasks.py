@@ -23,6 +23,58 @@ from Usuarios.models import Usuario
 
 logger = logging.getLogger(__name__)
 
+# Add this new task to tasks.py
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def enviar_correo_asignatura_asignada(self, asignatura_id):
+    """
+    Tarea asíncrona con Celery para notificar al docente cuando se le asigna una nueva asignatura.
+    Reintenta hasta 3 veces si falla (Gmail, red, etc.)
+    """
+    try:
+        asignatura = Asignatura.objects.select_related('docente_responsable', 'periodo_academico').get(id=asignatura_id, estado=True)
+
+        docente = asignatura.docente_responsable
+        if not docente or not docente.is_active:
+            logger.info(f"[Asignatura {asignatura_id}] No hay docente responsable activo para notificar.")
+            return
+
+        correo_docente = docente.correo
+        if not correo_docente:
+            logger.warning(f"[Asignatura {asignatura_id}] Docente sin correo configurado.")
+            return
+
+        context = {
+            'docente_nombre': docente.obtener_nombre_completo().title(),
+            'asignatura_nombre': asignatura.nombre.title(),
+            'codigo': asignatura.codigo.upper(),
+            'periodo': asignatura.periodo_academico.nombre.title(),
+            'plataforma_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:5173'),
+            'year': timezone.now().year,
+        }
+
+        # Renderizar plantilla HTML
+        html_message = render_to_string('emails/asignatura_asignada.html', context)
+        plain_message = strip_tags(html_message)
+
+        # Enviar correo
+        send_mail(
+            subject=f"Nueva Asignatura Asignada: {asignatura.nombre}",
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[correo_docente],
+            html_message=html_message,
+            fail_silently=False,
+        )
+
+        logger.info(f"[Asignatura {asignatura_id}] Correo de asignatura asignada enviado a {correo_docente}")
+
+    except Asignatura.DoesNotExist:
+        logger.warning(f"[Asignatura {asignatura_id}] No encontrada o inactiva al enviar notificación")
+    except Exception as e:
+        logger.error(f"[Asignatura {asignatura_id}] Error enviando correo asignatura asignada: {e}", exc_info=True)
+        # Reintenta automáticamente hasta 3 veces
+        raise self.retry(exc=e)
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def enviar_correo_tarea_nueva(self, tarea_id):
@@ -745,10 +797,11 @@ def enviar_correo_recuperacion_contrasena(self, usuario_id):
             return
 
         token = user.reset_password_token
+        url_recuperacion = f"{settings.FRONTEND_URL}/restablecer-contrasena/{token}"
 
         context = {
             'nombre': user.obtener_nombre_completo().title(),
-            'url_recuperacion': token,
+            'url_recuperacion': url_recuperacion,
             'expiracion_horas': 1,
             'year': timezone.now().year,
         }

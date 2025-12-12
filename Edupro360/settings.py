@@ -71,7 +71,7 @@ else:
         print("ATENCIÓN: No hay credenciales de correo → envío desactivado")
 
 # URL del frontend (para correos, redirecciones, etc.)
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5174')
 
 # Application definition
 
@@ -235,19 +235,18 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': False,
 }
 
-# CELERY CONFIGURACION
+# CELERY
 
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'django-db')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = os.getenv('CELERY_TIMEZONE', 'America/Bogota')
+if os.getenv('RENDER') or os.getenv('RAILWAY') or not os.getenv('DEBUG') == 'True':
+    # Producción → usar Redis Cloud
+    CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
+    CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND')
+else:
+    # Local Windows → usar Redis local
+    CELERY_BROKER_URL = 'redis://localhost:6379/0'
+    CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
 
 
-# Importante para que las tareas programadas usen tu zona horaria
-CELERY_ENABLE_UTC = False
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # SWAGGER
 
@@ -293,4 +292,4 @@ AWS_DEFAULT_ACL = None
 AWS_QUERYSTRING_EXPIRE = 3600
 AWS_S3_FILE_OVERWRITE = True
 
-# Utilizar codigo o herramientas de debug cuando programen y quitarlo cuando suban a pr
+

@@ -148,6 +148,7 @@ class CambiarContrasenaView(APIView):
 # ==================== SOLICITAR RECUPERACIÓN ====================
 class SolicitarRecuperacionView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     @swagger_auto_schema(
         operation_summary="Solicitar recuperación de contraseña",
@@ -190,6 +191,7 @@ class SolicitarRecuperacionView(APIView):
 # ==================== CONFIRMAR RECUPERACIÓN ====================
 class ConfirmarRecuperacionView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     @swagger_auto_schema(
         operation_summary="Confirmar restablecimiento de contraseña",
@@ -215,8 +217,8 @@ class ConfirmarRecuperacionView(APIView):
             user = Usuario.objects.get(reset_password_token=token)
             if user.validar_token_recuperacion(token):
                 user.set_password(password)
-                user.limpiar_token_recuperacion()
-                user.save()
+                user.save()  # guarda password
+                user.limpiar_token_recuperacion()  # guarda token limpio
                 return Response({"message": "Contraseña restablecida"})
             return Response({"error": "Token expirado"}, status=400)
         except Usuario.DoesNotExist:

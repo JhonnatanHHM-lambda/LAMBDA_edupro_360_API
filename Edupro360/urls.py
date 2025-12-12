@@ -28,19 +28,14 @@ schema_view = get_schema_view(
     openapi.Info(
         title="EduPro360 API",
         default_version="v1",
-        description="""
-                    Sistema Académico Completo - EduPro 360
-                    • Gestión de tareas, calificaciones, usuarios, entregas e inscripciones  
-                    • Notificaciones automáticas con Celery  
-                    • Reportes mensuales en Excel  
-                    • Recuperación de contraseña segura  
-                    """,
+        description="""Sistema Académico Completo - EduPro 360""",
         terms_of_service="https://www.google.com/policies/terms/",
         contact=openapi.Contact(email="soporte@edupro360.com"),
         license=openapi.License(name="MIT License"),
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
+    authentication_classes=[], 
 )
 
 urlpatterns = [

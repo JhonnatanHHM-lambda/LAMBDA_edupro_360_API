@@ -16,6 +16,7 @@ from Academicos.serializers import (
     AsignaturaSerializer,
     InscripcionSerializer,
 )
+from Notificaciones.tasks import enviar_correo_asignatura_asignada
 
 
 # ==================== PERIODO ACADÉMICO ====================
@@ -92,16 +93,15 @@ class AsignaturaCRUDView(APIView):
         tags=['Asignaturas']
     )
     def post(self, request):
-        serializer = AsignaturaSerializer(data=request.data)
-        if serializer.is_valid():
-            asignatura = serializer.save()
+            serializer = AsignaturaSerializer(data=request.data)
+            if serializer.is_valid():
+                asignatura = serializer.save()
 
-            if asignatura.docente_responsable:
+                if asignatura.docente_responsable:
+                    enviar_correo_asignatura_asignada.delay(asignatura.id)
 
-                pass 
-
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
+                return Response(serializer.data, status=201)
+            return Response(serializer.errors, status=400)
 
     @require_permission(['view_asignatura'], app_label='Academicos')
     @swagger_auto_schema(
@@ -190,7 +190,7 @@ class MisAsignaturasView(APIView):
                     "asignatura_id": 12,
                     "nombre": "Cálculo II",
                     "codigo": "CAL201",
-                    "docente": "Dr. María González",
+                    "docente": "Ana María López Pérez",
                     "periodo": "2025-I",
                     "fecha_inscripcion": "2025-11-15T10:30:00Z"
                 }
@@ -211,22 +211,25 @@ class MisAsignaturasView(APIView):
 
             data = []
             for insc in inscripciones:
+                asignatura = insc.asignatura
+                docente = asignatura.docente_responsable
+
+                # Usa el método correcto del modelo personalizado
+                docente_nombre = docente.obtener_nombre_completo() if docente else "Sin docente"
+
                 data.append({
                     "id": insc.id,
-                    "asignatura_id": insc.asignatura.id,
-                    "nombre": insc.asignatura.nombre,
-                    "codigo": insc.asignatura.codigo,
-                    "docente": insc.asignatura.docente_responsable.get_full_name()
-                        if (insc.asignatura.docente_responsable and hasattr(insc.asignatura.docente_responsable, "get_full_name"))
-                        else "Sin docente",
-                    "periodo": getattr(insc.asignatura.periodo_academico, "nombre", "Sin periodo"),
+                    "asignatura_id": asignatura.id,
+                    "nombre": asignatura.nombre,
+                    "codigo": asignatura.codigo,
+                    "docente": docente_nombre,
+                    "periodo": asignatura.periodo_academico.nombre if asignatura.periodo_academico else "Sin periodo",
                     "fecha_inscripcion": insc.fecha_inscripcion
                 })
             return Response(data)
 
         except Exception as e:
-            return Response({"error": "Error interno"}, status=500)
-
+            return Response({"error": "Error interno del servidor"}, status=500)
 
 class RetirarInscripcionView(APIView):
     @require_permission(['puede_inscribirse'], app_label='Academicos')
@@ -260,3 +263,28 @@ class RetirarInscripcionView(APIView):
             {"detail": "Te has retirado de la asignatura"},
             status=200
         )
+    
+class DocenteAsignaturasView(APIView):
+    """
+    Endpoint exclusivo para docentes.
+    Devuelve solo las asignaturas donde el usuario autenticado es el docente responsable.
+    """
+    @require_permission(['view_asignatura'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Mis asignaturas como docente",
+        operation_description="""
+        Retorna únicamente las asignaturas activas en las que el usuario autenticado 
+        es el **docente responsable**.
+        """,
+        responses={200: AsignaturaSerializer(many=True)},
+        tags=['Asignaturas - Docente']
+    )
+    def get(self, request):
+        # Solo trae asignaturas activas donde el usuario logueado es el docente responsable
+        asignaturas = Asignatura.objects.filter(
+            docente_responsable=request.user,
+            estado=True
+        ).select_related('periodo_academico').order_by('-creado')
+
+        serializer = AsignaturaSerializer(asignaturas, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -1,17 +1,19 @@
 from django.db import models
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from Academicos.models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion
+from Academicos.models import PeriodoAcademico, Asignatura, Tarea, Entrega, Calificacion, Inscripcion
 from Academicos.serializers import CalificacionSerializer
 from Notificaciones.tasks import (
     enviar_correo_calificacion_modificada,
     enviar_correo_calificacion_nueva
 )
 from Edupro360.decoradores import require_permission
+from decimal import Decimal
 
 
 # ==================== CALIFICACIÓN (CRUD COMPLETO) ====================
@@ -137,7 +139,86 @@ class MisNotasView(APIView):
         tags=['Notas - Estudiante']
     )
     def get(self, request):
-        return self._get_notas(request.user)
+        return Response(self._get_notas(request.user))
+
+    def _get_notas(self, estudiante, periodo_id=None, asignatura_id=None):
+        # Filtros base: asignaturas inscritas activas
+        filtros = Q(
+            inscripciones_asignatura__estudiante=estudiante,
+            inscripciones_asignatura__estado_inscripcion='A',
+            estado=True
+        )
+        if periodo_id:
+            filtros &= Q(periodo_academico_id=periodo_id)
+        if asignatura_id:
+            filtros &= Q(id=asignatura_id)
+
+        asignaturas = Asignatura.objects.filter(filtros).select_related(
+            'periodo_academico', 'docente_responsable'
+        ).prefetch_related('tareas', 'tareas__entregas', 'tareas__entregas__calificacion')
+
+        data = []
+        for asignatura in asignaturas:
+            promedio = self._calcular_promedio(estudiante, asignatura)
+            peso_calificado = self._peso_calificado(estudiante, asignatura)
+
+            tareas_data = []
+            for tarea in asignatura.tareas.filter(estado=True):
+                entrega = tarea.entregas.filter(estudiante=estudiante).first()
+                if entrega and entrega.estado_entrega == 'C' and entrega.calificacion:
+                    tareas_data.append({
+                        "id_tarea": tarea.id,
+                        "titulo": tarea.titulo,
+                        "descripcion": tarea.descripcion or "",                    
+                        "fecha_vencimiento": tarea.fecha_vencimiento.isoformat(),
+                        "tipo_tarea": tarea.get_tipo_tarea_display(),
+                        "peso_porcentual": float(tarea.peso_porcentual),
+                        "nota": float(entrega.calificacion.nota),
+                        "retroalimentacion": entrega.calificacion.retroalimentacion_docente or "",
+                        "estado": "Calificada",
+                        "fecha_entrega": entrega.fecha_entrega.isoformat() if entrega.fecha_entrega else None
+                    })
+
+            data.append({
+                "id_asignatura": asignatura.id,
+                "asignatura": asignatura.nombre,
+                "codigo": asignatura.codigo,
+                "periodo": asignatura.periodo_academico.nombre,
+                "docente": asignatura.docente_responsable.obtener_nombre_completo() if asignatura.docente_responsable else "Sin asignar",
+                "promedio_ponderado": round(float(promedio), 2),
+                "peso_calificado_%": float(peso_calificado),
+                "tareas": tareas_data
+            })
+
+        # Ordenar por período y asignatura
+        data.sort(key=lambda x: (x['periodo'], x['asignatura']))
+        return data
+
+    def _calcular_promedio(self, estudiante, asignatura):
+        entregas = Entrega.objects.filter(
+            estudiante=estudiante,
+            tarea__asignatura=asignatura,
+            estado_entrega='C',
+            calificacion__isnull=False
+        ).select_related('tarea', 'calificacion')
+
+        total_ponderado = Decimal('0.00')
+        for entrega in entregas:
+            total_ponderado += entrega.calificacion.nota * entrega.tarea.peso_porcentual / Decimal('100')
+        return total_ponderado
+
+    def _peso_calificado(self, estudiante, asignatura):
+        entregas = Entrega.objects.filter(
+            estudiante=estudiante,
+            tarea__asignatura=asignatura,
+            estado_entrega='C',
+            calificacion__isnull=False
+        ).select_related('tarea')
+
+        total_peso = entregas.aggregate(
+            total=models.Sum('tarea__peso_porcentual')
+        )['total'] or Decimal('0.00')
+        return total_peso
 
 
 class MisNotasPorPeriodoView(APIView):
@@ -152,7 +233,8 @@ class MisNotasPorPeriodoView(APIView):
     def get(self, request, periodo_id):
         get_object_or_404(PeriodoAcademico, id=periodo_id, estado=True)
         view = MisNotasView()
-        return view._get_notas(request.user, periodo_id=periodo_id)
+        data = view._get_notas(request.user, periodo_id=periodo_id)
+        return Response(data)
 
 
 class MisNotasPorAsignaturaView(APIView):
@@ -167,7 +249,8 @@ class MisNotasPorAsignaturaView(APIView):
     def get(self, request, asignatura_id):
         get_object_or_404(Asignatura, id=asignatura_id, estado=True)
         view = MisNotasView()
-        return view._get_notas(request.user, asignatura_id=asignatura_id)
+        data = view._get_notas(request.user, asignatura_id=asignatura_id)
+        return Response(data)
 
 
 class MisNotasResumenView(APIView):
@@ -185,18 +268,25 @@ class MisNotasResumenView(APIView):
     )
     def get(self, request):
         estudiante = request.user
+        view = MisNotasView()
         data = []
-        for asignatura in Asignatura.objects.filter(estado=True):
-            promedio = MisNotasView()._calcular_promedio(estudiante, asignatura)
-            peso = MisNotasView()._peso_calificado(estudiante, asignatura)
-            if peso > 0 or promedio > 0:
+        asignaturas = Asignatura.objects.filter(
+            inscripciones_asignatura__estudiante=estudiante,
+            inscripciones_asignatura__estado_inscripcion='A',
+            estado=True
+        ).select_related('periodo_academico')
+
+        for asignatura in asignaturas:
+            promedio = view._calcular_promedio(estudiante, asignatura)
+            peso = view._peso_calificado(estudiante, asignatura)
+            if float(peso) > 0 or float(promedio) > 0:
                 data.append({
                     "id": asignatura.id,
                     "asignatura": asignatura.nombre,
                     "codigo": asignatura.codigo,
                     "periodo": asignatura.periodo_academico.nombre,
-                    "promedio": round(promedio, 2),
-                    "peso_calificado_%": peso
+                    "promedio": round(float(promedio), 2),
+                    "peso_calificado_%": float(peso)
                 })
         data.sort(key=lambda x: (x['periodo'], x['asignatura']))
         return Response(data)

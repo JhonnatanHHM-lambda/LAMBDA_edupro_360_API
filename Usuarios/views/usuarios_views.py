@@ -175,3 +175,18 @@ class UsuarioYoView(APIView):
             serializer.save()
             return Response(UsuarioListSerializer(request.user).data)
         return Response(serializer.errors, status=400)
+    
+    # ==================== LISTA DE DOCENTES ====================
+class DocentesListView(APIView):
+
+    @require_permission(['change_asignatura'], app_label='Academicos')
+    @swagger_auto_schema(
+        operation_summary="Listar docentes activos",
+        operation_description="Devuelve usuarios activos en el grupo 'Docente'",
+        responses={200: UsuarioListSerializer(many=True)},
+        tags=['Usuarios']
+    )
+    def get(self, request):
+        docentes = Usuario.objects.filter(groups__name='Docente', is_active=True)
+        serializer = UsuarioListSerializer(docentes, many=True)
+        return Response(serializer.data)
