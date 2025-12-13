@@ -114,6 +114,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+APPEND_SLASH = True
+
 ROOT_URLCONF = "Edupro360.urls"
 
 TEMPLATES = [
@@ -192,12 +194,32 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS AUTORIZATIONS
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+# CORS - CONFIGURACIÓN PARA PRODUCCIÓN
+CORS_ALLOW_ALL_ORIGINS = False  # Desactiva "todas" para seguridad
+
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
+    "https://jhonnatanhhm-lambda.github.io",  # Tu frontend en GitHub Pages
+    "http://localhost:5173",                  # Local (Vite)
+    "http://localhost:5174",                  # Si usas otro puerto
+    "http://127.0.0.1:5173",
 ]
+
+
+CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Opcional: permite credenciales (cookies, tokens)
+CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     # === AUTENTICACIÓN ===
