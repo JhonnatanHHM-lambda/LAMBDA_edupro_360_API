@@ -15,6 +15,7 @@ from __future__ import absolute_import, unicode_literals
 import os
 from datetime import timedelta
 from pathlib import Path
+import ssl
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
@@ -261,12 +262,22 @@ SIMPLE_JWT = {
 
 # CELERY
 
+
+# CELERY - Configuración SSL correcta
 if os.getenv('RENDER') or os.getenv('RAILWAY') or not os.getenv('DEBUG') == 'True':
-    # Producción → usar Redis Cloud
+    # Producción → usar Redis Cloud con SSL
     CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
     CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND')
+    
+    # 🔥 AGREGAR ESTO PARA ARREGLAR SSL
+    CELERY_BROKER_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE  # O ssl.CERT_REQUIRED si tienes certificado
+    }
+    CELERY_REDIS_BACKEND_USE_SSL = {
+        'ssl_cert_reqs': ssl.CERT_NONE
+    }
 else:
-    # Local Windows → usar Redis local
+    # Local Windows → usar Redis local sin SSL
     CELERY_BROKER_URL = 'redis://localhost:6379/0'
     CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
 
