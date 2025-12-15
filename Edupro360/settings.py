@@ -195,18 +195,18 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS - CONFIGURACIÓN PARA PRODUCCIÓN
-CORS_ALLOW_ALL_ORIGINS = False  # Desactiva "todas" para seguridad
 
-CORS_ALLOWED_ORIGINS = [
-    "https://lambda-edupro-360-ui.vercel.app", # vecel
-    "https://jhonnatanhhm-lambda.github.io",  # frontend en GitHub Pages
-    "http://localhost:5173",                  # Local (Vite)
-    "http://localhost:5174",                  # Si usas otro puerto
-    "http://127.0.0.1:5173",
-]
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True   # Solo en desarrollo → nunca más errores CORS local
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [
+        "https://lambda-edupro-360-ui.vercel.app",
+        "https://jhonnatanhhm-lambda.github.io",
+    ]
 
+CORS_ALLOW_CREDENTIALS = True  # Mantenlo siempre si usas JWT o sesiones
 
-CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -218,6 +218,9 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Y esto ayuda mucho con caching de navegadores
+CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
 
 # Opcional: permite credenciales (cookies, tokens)
 CORS_ALLOW_CREDENTIALS = True
