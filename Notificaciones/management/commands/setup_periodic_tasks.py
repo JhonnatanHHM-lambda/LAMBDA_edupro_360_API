@@ -6,35 +6,41 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # === REPORTE MENSUAL: Día 1 de cada mes a las 8:00 AM ===
-        schedule, created = CrontabSchedule.objects.get_or_create(
+        schedule, _ = CrontabSchedule.objects.get_or_create(
             minute='0',
             hour='8',
             day_of_month='1',
             month_of_year='*',
-            timezone='America/Bogota'  
+            day_of_week='*',
+            defaults={'timezone': 'America/Bogota'}
         )
 
         PeriodicTask.objects.get_or_create(
             crontab=schedule,
             name='Reporte Mensual Automático - 8:00 AM Día 1',
-            task='Notificaciones.tasks.generar_reporte_mensual',
-            defaults={'enabled': True}
+            defaults={
+                'task': 'Notificaciones.tasks.generar_reporte_mensual',
+                'enabled': True
+            }
         )
 
-        # === PROGRAMAR RECORDATORIOS DIARIAMENTE ===
+        # === RECORDATORIOS DIARIOS a las 9:00 AM ===
         daily_schedule, _ = CrontabSchedule.objects.get_or_create(
             minute='0',
-            hour='9',  # Todos los días a las 9:00 AM
+            hour='9',
             day_of_week='*',
             day_of_month='*',
             month_of_year='*',
+            defaults={'timezone': 'America/Bogota'}
         )
 
         PeriodicTask.objects.get_or_create(
             crontab=daily_schedule,
             name='Revisar y programar recordatorios de tareas',
-            task='Notificaciones.tasks.programar_recordatorios_tareas',
-            defaults={'enabled': True}
+            defaults={
+                'task': 'Notificaciones.tasks.programar_recordatorios_tareas',
+                'enabled': True
+            }
         )
 
         self.stdout.write(
