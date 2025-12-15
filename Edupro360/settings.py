@@ -198,7 +198,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOW_ALL_ORIGINS = False  # Desactiva "todas" para seguridad
 
 CORS_ALLOWED_ORIGINS = [
-    "https://lambda-edupro-360-ui.vercel.app/", # vecel
+    "https://lambda-edupro-360-ui.vercel.app", # vecel
     "https://jhonnatanhhm-lambda.github.io",  # frontend en GitHub Pages
     "http://localhost:5173",                  # Local (Vite)
     "http://localhost:5174",                  # Si usas otro puerto
