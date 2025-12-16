@@ -15,7 +15,6 @@ from __future__ import absolute_import, unicode_literals
 import os
 from datetime import timedelta
 from pathlib import Path
-import ssl
 
 from celery.schedules import crontab
 from dotenv import load_dotenv
@@ -258,13 +257,11 @@ REST_FRAMEWORK = {
 
     # === THROTTLING (RATE LIMITING) ===
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',     # Para usuarios no autenticados
-        'rest_framework.throttling.UserRateThrottle',     # Para usuarios autenticados
+        # 'rest_framework.throttling.AnonRateThrottle',    
+        # 'rest_framework.throttling.UserRateThrottle',    
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '10/min',      # 10 peticiones por minuto
-        'user': '100/min',     # 100 peticiones por minuto para usuarios logueados
-    },
+
+   # 'DEFAULT_THROTTLE_RATES': { 'anon': '100/min',     'user': '1000/min',     },
 }
 
 SIMPLE_JWT = {
@@ -273,25 +270,14 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': False,
 }
 
-# CELERY
-
-
-# CELERY - Configuración SSL correcta
+# CELERY - 
 if os.getenv('RENDER') or os.getenv('RAILWAY') or not os.getenv('DEBUG') == 'True':
-    # Producción → usar Redis Cloud con SSL
+
     CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
     CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND')
     
-    # 🔥 AGREGAR ESTO PARA ARREGLAR SSL
-    CELERY_BROKER_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_NONE,
-    }
-
-    CELERY_REDIS_BACKEND_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_NONE,
-    }
 else:
-    # Local Windows → usar Redis local sin SSL
+    # Local Windows 
     CELERY_BROKER_URL = 'redis://localhost:6379/0'
     CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
 
