@@ -206,6 +206,10 @@ else:
         "https://jhonnatanhhm-lambda.github.io",
     ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://lambda-edupro-360-ui.vercel.app",
+]
+
 CORS_ALLOW_CREDENTIALS = True  # Mantenlo siempre si usas JWT o sesiones
 
 CORS_ALLOW_HEADERS = [
@@ -225,6 +229,15 @@ CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
 
 # Opcional: permite credenciales (cookies, tokens)
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+]
 
 REST_FRAMEWORK = {
     # === AUTENTICACIÓN ===
@@ -271,10 +284,11 @@ if os.getenv('RENDER') or os.getenv('RAILWAY') or not os.getenv('DEBUG') == 'Tru
     
     # 🔥 AGREGAR ESTO PARA ARREGLAR SSL
     CELERY_BROKER_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_NONE  # O ssl.CERT_REQUIRED si tienes certificado
+        'ssl_cert_reqs': ssl.CERT_NONE,
     }
+
     CELERY_REDIS_BACKEND_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_NONE
+        'ssl_cert_reqs': ssl.CERT_NONE,
     }
 else:
     # Local Windows → usar Redis local sin SSL
