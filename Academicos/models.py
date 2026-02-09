@@ -1,8 +1,11 @@
 import shortuuid
-from django.db import models
+
 from django.core.exceptions import ValidationError
+from django.core.files.storage import default_storage
+from django.db import models
 from django.db.models import Sum
 from django.utils import timezone
+
 from Base.models import BaseModel
 from Usuarios.models import Usuario
 
@@ -69,7 +72,65 @@ class Asignatura(BaseModel):
         ):
             raise ValidationError("El docente debe pertenecer al grupo 'Docente'.")
 
+class Inscripcion(BaseModel):
+    """
+    Permite a un estudiante inscribirse en una asignatura específica.
+    """
+    estudiante = models.ForeignKey(
+        Usuario,
+        on_delete=models.CASCADE,
+        related_name="inscripciones_estudiante",
+        limit_choices_to={"groups__name": "Estudiante"},
+        verbose_name="estudiante"
+    )
+    asignatura = models.ForeignKey(
+        "Asignatura", 
+        on_delete=models.CASCADE,
+        related_name="inscripciones_asignatura",
+        verbose_name="asignatura"
+    )
+    fecha_inscripcion = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="fecha de inscripción"
+    )
+    estado_inscripcion = models.CharField(
+        max_length=1,
+        choices=[
+            ("A", "Activa"),
+            ("R", "Retirada"),
+            ("S", "Suspendida"),
+        ],
+        default="A",
+        verbose_name="estado de la inscripción"
+    )
 
+    class Meta:
+        verbose_name = "inscripción"
+        verbose_name_plural = "inscripciones"
+        db_table = "inscripcion"
+        unique_together = ("estudiante", "asignatura")
+        permissions = [
+            ("puede_inscribirse", "Puede inscribirse a asignaturas"),
+            ("puede_ver_inscripciones", "Puede ver todas las inscripciones"),
+        ]
+
+    def __str__(self):
+        estado = dict(self._meta.get_field('estado_inscripcion').choices).get(self.estado_inscripcion, "")
+        return f"{self.estudiante.obtener_nombre_completo().title()} → {self.asignatura.nombre.title()} ({estado})"
+
+    def clean(self):
+        super().clean()
+        if self.asignatura and not self.asignatura.estado:
+            raise ValidationError("No se puede inscribir a una asignatura inactiva.")
+
+        if self.asignatura:
+            hoy = timezone.now().date()
+            periodo = self.asignatura.periodo_academico
+            if periodo.fecha_inicio > hoy or periodo.fecha_fin < hoy:
+                raise ValidationError(
+                    "El periodo académico no está vigente para realizar inscripciones."
+                )
+            
 class Tarea(BaseModel):
     TIPO_TAREA = [
         ("T", "Tarea"),
@@ -162,6 +223,24 @@ class Entrega(BaseModel):
     def __str__(self):
         return f"Entrega de {self.estudiante.obtener_nombre_completo()} - {self.tarea.titulo.title()}"
 
+    def save(self, *args, **kwargs):
+            # Solo si ya existe en DB y tiene archivo
+            if self.pk:
+                try:
+                    old = Entrega.objects.get(pk=self.pk)
+                    if old.archivo_entrega and old.archivo_entrega != self.archivo_entrega:
+                        # Borra físicamente del bucket
+                        default_storage.delete(old.archivo_entrega.name)
+                except Entrega.DoesNotExist:
+                    pass
+
+            super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+            # Al borrar la entrega, borra también el archivo de R2
+            if self.archivo_entrega:
+                default_storage.delete(self.archivo_entrega.name)
+            super().delete(*args, **kwargs)
 
     def clean(self):
         if self.tarea.fecha_vencimiento < timezone.now():

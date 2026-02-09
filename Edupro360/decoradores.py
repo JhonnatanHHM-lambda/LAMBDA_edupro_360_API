@@ -1,16 +1,17 @@
-# Edupro360/decoradores.py
-from rest_framework.response import Response
-from rest_framework import status
 from functools import wraps
 
-def require_permission(permissions, app_label=None):
-    """
+from rest_framework import status
+from rest_framework.response import Response
+
+"""
     Decorador para vistas que verifica permisos.
     
     Uso:
         @require_permission(['add_asignatura'], app_label='Academicos')
         @require_permission(['can_submit_task'], app_label='Usuarios')  # para personalizados
-    """
+"""
+
+def require_permission(permissions, app_label=None):
     def decorator(func):
         @wraps(func)
         def wrapper(self, request, *args, **kwargs):
@@ -20,19 +21,20 @@ def require_permission(permissions, app_label=None):
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
-            # Construir permisos completos
-            required_perms = []
-            for perm in permissions:
-                if app_label:
-                    required_perms.append(f"{app_label}.{perm}")
-                else:
-                    # Si no hay app_label, asumir que es global (como can_*)
-                    required_perms.append(perm)
+            # Construir lista de permisos completos
+            required_perms = [
+                f"{app_label}.{perm}" if app_label else perm
+                for perm in permissions
+            ]
 
-            # Verificar si tiene AL MENOS UNO de los permisos
-            if not any(request.user.has_perm(perm) for perm in required_perms):
+            # USAR has_perms() + all() → NUNCA FALLA
+            if not request.user.has_perms(required_perms):
                 return Response(
-                    {"error": "Permiso denegado", "required": required_perms},
+                    {
+                        "error": "Permiso denegado",
+                        "required": required_perms,
+                        "tienes": sorted(list(request.user.get_all_permissions()))
+                    },
                     status=status.HTTP_403_FORBIDDEN
                 )
 

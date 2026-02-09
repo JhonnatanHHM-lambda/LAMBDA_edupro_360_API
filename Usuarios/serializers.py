@@ -1,6 +1,8 @@
-from rest_framework import serializers
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
+
+from rest_framework import serializers
+
 from .models import Usuario
 
 # 1. LISTADO (solo lectura)
@@ -8,15 +10,24 @@ from .models import Usuario
 class UsuarioListSerializer(serializers.ModelSerializer):
     nombre_completo = serializers.CharField(source='obtener_nombre_completo', read_only=True)
     rol = serializers.CharField(source='rol_principal', read_only=True)
+    permisos_rol = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Usuario
         fields = [
             'id', 'cedula', 'correo', 'nombres', 'apellidos', 'nombre_completo',
             'genero', 'codigo', 'fecha_nacimiento', 'telefono', 'rol',
+            'permisos_rol',  
             'estado', 'creado', 'modificado'
         ]
         read_only_fields = ['creado', 'modificado', 'estado', 'id', 'codigo']
+
+
+    def get_permisos_rol(self, obj):
+        if obj.groups.exists():
+            rol_principal = obj.groups.first()
+            return [permission.codename for permission in rol_principal.permissions.all()]
+        return []
 
 
 # 2. CREACIÓN (registro público)
@@ -97,6 +108,9 @@ class UsuarioUpdateSerializer(serializers.ModelSerializer):
 
 # 4. GRUPO (CRUD de roles)
 
+# serializers.py → VERSIÓN FINAL QUE FUNCIONA CON TODO
+from django.contrib.auth.models import Permission, Group, ContentType
+
 class GrupoSerializer(serializers.ModelSerializer):
     permisos = serializers.ListField(
         child=serializers.CharField(max_length=100),
@@ -118,16 +132,16 @@ class GrupoSerializer(serializers.ModelSerializer):
 
         if permisos_codenames:
             try:
-                ct = ContentType.objects.get(id=6) 
-                permisos = Permission.objects.filter(
-                    content_type=ct,
-                    codename__in=permisos_codenames
-                )
+
+                permisos = Permission.objects.filter(codename__in=permisos_codenames)
+                
                 if len(permisos) != len(permisos_codenames):
-                    faltantes = set(permisos_codenames) - {p.codename for p in permisos}
+                    existentes = {p.codename for p in permisos}
+                    faltantes = set(permisos_codenames) - existentes
                     raise serializers.ValidationError({
                         "permisos": f"Permisos no encontrados: {list(faltantes)}"
                     })
+                
                 grupo.permissions.set(permisos)
             except Exception as e:
                 grupo.delete()
@@ -142,13 +156,10 @@ class GrupoSerializer(serializers.ModelSerializer):
 
         if permisos_codenames is not None:
             try:
-                ct = ContentType.objects.get(id=6)
-                permisos = Permission.objects.filter(
-                    content_type=ct,
-                    codename__in=permisos_codenames
-                )
+                permisos = Permission.objects.filter(codename__in=permisos_codenames)
                 if len(permisos) != len(permisos_codenames):
-                    faltantes = set(permisos_codenames) - {p.codename for p in permisos}
+                    existentes = {p.codename for p in permisos}
+                    faltantes = set(permisos_codenames) - existentes
                     raise serializers.ValidationError({
                         "permisos": f"Permisos no encontrados: {list(faltantes)}"
                     })

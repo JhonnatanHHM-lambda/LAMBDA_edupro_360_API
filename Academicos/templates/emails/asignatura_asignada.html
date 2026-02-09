@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Nueva asignatura asignada</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .header { background: #1e40af; padding: 30px; text-align: center; color: white; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .content { padding: 30px; color: #333; line-height: 1.6; }
+        .highlight { background: #dbeafe; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid #1e40af; }
+        .btn { display: inline-block; background: #1e40af; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
+        .footer { background: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EduPro360</h1>
+        </div>
+        <div class="content">
+            <h2>¡Hola, {{ docente_nombre }}!</h2>
+            <p>Te han asignado como docente responsable de una nueva asignatura en la plataforma.</p>
+
+            <div class="highlight">
+                <strong>Asignatura:</strong> {{ asignatura_nombre }}<br>
+                <strong>Código:</strong> {{ codigo }}<br>
+                <strong>Período académico:</strong> {{ periodo }}
+            </div>
+
+            <p>Puedes comenzar a gestionar tus tareas, estudiantes y calificaciones desde tu panel docente.</p>
+
+            <div style="text-align: center;">
+                <a href="{{ plataforma_url }}/docente" class="btn">Ir al Panel Docente</a>
+            </div>
+
+            <p>¡Éxitos en este nuevo período!</p>
+        </div>
+        <div class="footer">
+            <p>EduPro360 &copy; {{ year }} • Plataforma educativa de excelencia</p>
+        </div>
+    </div>
+</body>
+</html>

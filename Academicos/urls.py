@@ -1,9 +1,10 @@
 from django.urls import path
 from Academicos.views.pensum_views import (
-    PeriodoAcademicoCRUDView, AsignaturaCRUDView
+    PeriodoAcademicoCRUDView, AsignaturaCRUDView, InscribirAsignaturaView, MisAsignaturasView, RetirarInscripcionView, DocenteAsignaturasView
 )
 from Academicos.views.tareas_views import ( TareaCRUDView,
-    EntregaCRUDView, MisEntregasView
+    EntregaCRUDView, MisEntregasView, TareasEntregadasEstudianteView, TareasPendientesEstudianteView, 
+    EntregasEntregadasDocenteView, EntregasCalificadasDocenteView, MiEntregaPorTareaView
 )
 from Academicos.views.notas_views import (
     CalificacionCRUDView, MisNotasView, MisNotasPorAsignaturaView,
@@ -18,15 +19,26 @@ urlpatterns = [
     # Asignatura
     path('asignaturas/', AsignaturaCRUDView.as_view(), name='asignaturas-list'),
     path('asignaturas/<int:pk>/', AsignaturaCRUDView.as_view(), name='asignaturas-detail'),
+    path('docente/mis-asignaturas/', DocenteAsignaturasView.as_view(), name='docente-mis-asignaturas'),
+
+    # Incripciones
+    path('inscribir/', InscribirAsignaturaView.as_view(), name='inscribir'),
+    path('mis-asignaturas/', MisAsignaturasView.as_view(), name='mis-asignaturas'),
+    path('retirar/<int:inscripcion_id>/', RetirarInscripcionView.as_view(), name='retirar'),
 
     # Tarea
     path('tareas/', TareaCRUDView.as_view(), name='tareas-list'),
     path('tareas/<int:pk>/', TareaCRUDView.as_view(), name='tareas-detail'),
-
+    path('estudiante/tareas/pendientes/', TareasPendientesEstudianteView.as_view(), name='estudiante-tareas-pendientes'),
+    path('estudiante/tareas/entregadas/', TareasEntregadasEstudianteView.as_view(), name='estudiante-tareas-entregadas'),
+    
     # Entrega
     path('entregas/', EntregaCRUDView.as_view(), name='entregas'),
     path('entregas/<int:pk>/', EntregaCRUDView.as_view(), name='entregas-detail'),
+    path('estudiante/entrega/tarea/<int:tarea_id>/', MiEntregaPorTareaView.as_view(), name='estudiante-mi-entrega-tarea'),
     path('mis-entregas/', MisEntregasView.as_view(), name='mis-entregas'),
+    path('docente/entregas/entregadas/', EntregasEntregadasDocenteView.as_view(), name='docente-entregas-entregadas'),
+    path('docente/entregas/calificadas/', EntregasCalificadasDocenteView.as_view(), name='docente-entregas-calificadas'),
 
     # Calificación
     path('calificaciones/', CalificacionCRUDView.as_view(), name='calificaciones'),

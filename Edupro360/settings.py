@@ -10,10 +10,15 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
-from pathlib import Path
-from dotenv import load_dotenv
-from datetime import timedelta
+from __future__ import absolute_import, unicode_literals
+
 import os
+from datetime import timedelta
+from pathlib import Path
+
+from celery.schedules import crontab
+from dotenv import load_dotenv
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,21 +32,44 @@ load_dotenv(BASE_DIR / ".env")
 ADMIN_REGISTRATION_SECRET = os.getenv('ADMIN_REGISTRATION_SECRET')
 ADMIN_REGISTRATION_ENABLED = os.getenv('ADMIN_REGISTRATION_ENABLED', 'False').lower() == 'true'
 
-# Validación al inicio
-if not ADMIN_REGISTRATION_SECRET:
-    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env")
-if len(ADMIN_REGISTRATION_SECRET) < 16:
-    raise ValueError("ADMIN_REGISTRATION_SECRET debe tener al menos 16 caracteres")
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-default-key") 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
+# AHORA (perfecto para Render)
+if not ADMIN_REGISTRATION_SECRET and DEBUG:
+    raise ValueError("ADMIN_REGISTRATION_SECRET es obligatorio en .env (solo en desarrollo)")
+
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# === CONFIGURACIÓN DE CORREO ELECTRÓNICO ===
+EMAIL_USER = os.getenv('EMAIL_USER')
+EMAIL_PASS = os.getenv('EMAIL_PASS')
+
+if DEBUG:
+    # vemos el correo en consola 
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    # Producción o pruebas reales
+    if EMAIL_USER and EMAIL_PASS:
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+        EMAIL_HOST = 'smtp.gmail.com'
+        EMAIL_PORT = 587
+        EMAIL_USE_TLS = True
+        EMAIL_HOST_USER = EMAIL_USER
+        EMAIL_HOST_PASSWORD = EMAIL_PASS
+        DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+        SERVER_EMAIL = EMAIL_HOST_USER
+        print("Correo configurado para envío REAL con Gmail")
+    else:
+        # Seguridad: si no hay credenciales → no envía y no muestra nada en consola
+        EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+        print("ATENCIÓN: No hay credenciales de correo → envío desactivado")
+
+# URL del frontend (para correos, redirecciones, etc.)
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5174')
 
 # Application definition
 
@@ -52,6 +80,8 @@ DJANGO_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'django_celery_beat',
+    'django_celery_results',
 ]
 
 LOCAL_APPS = [
@@ -63,6 +93,7 @@ LOCAL_APPS = [
 
 THIRD_PARTY_APPS = [
     'corsheaders',
+    'drf_yasg',
     'rest_framework',
     'rest_framework_simplejwt',
 ]
@@ -74,6 +105,7 @@ AUTH_USER_MODEL = 'Usuarios.Usuario'
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -81,6 +113,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+APPEND_SLASH = True
 
 ROOT_URLCONF = "Edupro360.urls"
 
@@ -151,18 +185,57 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
-MEDIA_URL = '/media/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# CORS AUTORIZATIONS
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS - CONFIGURACIÓN PARA PRODUCCIÓN
+
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True   # Solo en desarrollo → nunca más errores CORS local
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [
+        "https://lambda-edupro-360-ui.vercel.app",
+        "https://jhonnatanhhm-lambda.github.io",
+    ]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://lambda-edupro-360-ui.vercel.app",
+]
+
+CORS_ALLOW_CREDENTIALS = True  # Mantenlo siempre si usas JWT o sesiones
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Y esto ayuda mucho con caching de navegadores
+CORS_EXPOSE_HEADERS = ['Content-Type', 'Authorization']
+
+# Opcional: permite credenciales (cookies, tokens)
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
+
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
 ]
 
 REST_FRAMEWORK = {
@@ -177,15 +250,18 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',  # Requiere login por defecto
     ],
 
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ),
+
     # === THROTTLING (RATE LIMITING) ===
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',     # Para usuarios no autenticados
-        'rest_framework.throttling.UserRateThrottle',     # Para usuarios autenticados
+        # 'rest_framework.throttling.AnonRateThrottle',    
+        # 'rest_framework.throttling.UserRateThrottle',    
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '10/min',      # 10 peticiones por minuto
-        'user': '100/min',     # 100 peticiones por minuto para usuarios logueados
-    },
+
+   # 'DEFAULT_THROTTLE_RATES': { 'anon': '100/min',     'user': '1000/min',     },
 }
 
 SIMPLE_JWT = {
@@ -193,3 +269,62 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("REFRESH_TOKEN_LIFETIME", 7))),
     'ROTATE_REFRESH_TOKENS': False,
 }
+
+# CELERY - 
+if os.getenv('RENDER') or os.getenv('RAILWAY') or not os.getenv('DEBUG') == 'True':
+
+    CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
+    CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND')
+    
+else:
+    # Local Windows 
+    CELERY_BROKER_URL = 'redis://localhost:6379/0'
+    CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+
+
+
+# SWAGGER
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Token de acceso. Ejemplo: Bearer eyJhbGciOiJIUzI1NiIsIn...'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'JSON_EDITOR': True,
+    'SUPPORTED_SUBMIT_METHODS': ['get', 'post', 'put', 'patch', 'delete'],
+    'OPERATIONS_SORTER': 'alpha',
+    'TAGS_SORTER': 'alpha',
+    'DOC_EXPANSION': 'list',
+    'SHOW_COMMON_EXTENSIONS': True,
+}
+
+# Para que aparezcan TODOS los endpoints (incluso los de AllowAny)
+DEFAULT_AUTO_SCHEMA_CLASS = 'drf_yasg.inspectors.SwaggerAutoSchema'
+
+
+# settings.py → CONFIGURACIÓN CON R2 PRIVADO
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+AWS_S3_ENDPOINT_URL = os.getenv('AWS_S3_ENDPOINT_URL')
+
+# CLAVE PARA R2 PRIVADO
+AWS_S3_REGION_NAME = 'auto'
+AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_S3_ADDRESSING_STYLE = 'path'        
+AWS_S3_USE_SSL = True
+
+# SEGURIDAD
+AWS_QUERYSTRING_AUTH = True
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_EXPIRE = 3600
+AWS_S3_FILE_OVERWRITE = True
+
+

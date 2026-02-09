@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Recordatorio de Tarea - EduPro360</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .header { background: #1e40af; padding: 30px; text-align: center; color: white; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .content { padding: 30px; color: #333; line-height: 1.6; }
+        .highlight { background: #dbeafe; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid #1e40af; }
+        .btn { 
+            display: inline-block; 
+            background: #1e40af; 
+            color: white; 
+            padding: 16px 36px; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            font-size: 18px;
+            margin: 25px 0;
+        }
+        .footer { background: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EduPro360</h1>
+        </div>
+        <div class="content">
+            <h2>Recordatorio: {{ tipo_recordatorio }}</h2>
+            <p>¡Hola!</p>
+            <p>Tienes una tarea pendiente que <strong>vence pronto</strong>:</p>
+
+            <div class="highlight">
+                <strong>Tarea:</strong> {{ tarea_titulo }}<br>
+                <strong>Asignatura:</strong> {{ asignatura_nombre }}<br>
+                <strong>Tipo:</strong> {{ tipo_tarea }}<br>
+                <strong>Vence:</strong> {{ fecha_vencimiento }}<br>
+                <strong>Docente:</strong> {{ docente_nombre }}
+            </div>
+
+            <div style="text-align: center;">
+                <a href="{{ url_tarea }}" class="btn">
+                    Entregar Tarea Ahora
+                </a>
+            </div>
+
+            <p><strong>¡No dejes para última hora!</strong></p>
+        </div>
+        <div class="footer">
+            <p>EduPro360 &copy; {{ year }} • Plataforma educativa de excelencia</p>
+        </div>
+    </div>
+</body>
+</html>
